@@ -12,7 +12,7 @@ export async function withFileRecordLock<T>(
     realpath: false,
     stale: 60_000,
     update: 5000,
-    retries: wait ? { retries: 600, minTimeout: 25, maxTimeout: 100, factor: 1 } : 0,
+    retries: wait ? { retries: 600, minTimeout: 100, maxTimeout: 100, factor: 1 } : 0,
   });
   try {
     return await operation();
