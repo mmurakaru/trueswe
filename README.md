@@ -17,6 +17,7 @@ npm run check
 `TRUESWE_BEND` can point to a compatible installed compiler.
 
 The [specification](docs/spec.md) defines the first release.
+Use the [local services guide](docs/local-services.md) to run the Codex smoke task through Harbor and Langfuse.
 Repository skills live in `skills/` with upstream provenance in [docs/skill-sources.md](docs/skill-sources.md).
 
 Contributions include a Changeset.

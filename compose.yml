@@ -1,0 +1,118 @@
+name: trueswe
+services:
+  langfuse-worker:
+    image: docker.langfuse.com/langfuse/langfuse-worker:4.76.0@sha256:27e8b49d619a013bca38ed9b0853456e19f5667a23e8e26e3a10d4e28485f49c
+    depends_on: &dependencies
+      postgres: { condition: service_healthy }
+      clickhouse: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      minio: { condition: service_healthy }
+    environment: &langfuse-environment
+      DATABASE_URL: postgresql://trueswe:${POSTGRES_PASSWORD}@postgres:5432/trueswe
+      NEXTAUTH_URL: http://localhost:3035
+      SALT: ${SALT:?Run npm run services:configure}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Run npm run services:configure}
+      TELEMETRY_ENABLED: "false"
+      LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: "true"
+      CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:9000
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_USER: trueswe
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?Run npm run services:configure}
+      CLICKHOUSE_CLUSTER_ENABLED: "false"
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_AUTH: ${REDIS_AUTH:?Run npm run services:configure}
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: trueswe
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?Run npm run services:configure}
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
+      LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+      LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: trueswe
+      LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?Run npm run services:configure}
+      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://minio:9000
+      LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: media/
+  langfuse-web:
+    image: docker.langfuse.com/langfuse/langfuse:4.76.0@sha256:59abb54faacf45b63d09f4076d45683dae26a6661974d497836543d350b16575
+    depends_on: *dependencies
+    ports: ["127.0.0.1:3035:3000"]
+    environment:
+      <<: *langfuse-environment
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?Run npm run services:configure}
+      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://localhost:3036
+      LANGFUSE_S3_MEDIA_UPLOAD_INTERNAL_ENDPOINT: http://minio:9000
+      LANGFUSE_INIT_ORG_ID: trueswe
+      LANGFUSE_INIT_ORG_NAME: TrueSWE
+      LANGFUSE_INIT_PROJECT_ID: trueswe
+      LANGFUSE_INIT_PROJECT_NAME: TrueSWE
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:?Run npm run services:configure}
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_SECRET_KEY:?Run npm run services:configure}
+      LANGFUSE_INIT_USER_EMAIL: developer@trueswe.local
+      LANGFUSE_INIT_USER_NAME: TrueSWE developer
+      LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_LOCAL_PASSWORD:?Run npm run services:configure}
+  postgres:
+    image: docker.io/library/postgres:17@sha256:ff87138949ad9a46f32ff23bd6852b52ce024a13dffe9b4087be98292cdd3b4f
+    environment:
+      POSTGRES_USER: trueswe
+      POSTGRES_DB: trueswe
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run npm run services:configure}
+    volumes: [postgres:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "trueswe"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+  clickhouse:
+    image: docker.io/clickhouse/clickhouse-server:26.3.62.3@sha256:de3e47c64078aa196dae2349e048fc98ba81947f651f5c20e06e46baea8ae40a
+    user: "101:101"
+    environment:
+      CLICKHOUSE_USER: trueswe
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?Run npm run services:configure}
+      CLICKHOUSE_DB: default
+    volumes: [clickhouse:/var/lib/clickhouse, clickhouse-logs:/var/log/clickhouse-server]
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+  redis:
+    image: docker.io/library/redis:7@sha256:2e3eb11462c4e3759e6972678dd051d150ff54b1e60714b3c33b701260172a90
+    environment:
+      REDIS_AUTH: ${REDIS_AUTH:?Run npm run services:configure}
+      REDISCLI_AUTH: ${REDIS_AUTH:?Run npm run services:configure}
+    command:
+      ["sh", "-c", 'exec redis-server --requirepass "$$REDIS_AUTH" --maxmemory-policy noeviction']
+    volumes: [redis:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+  minio:
+    image: cgr.dev/chainguard/minio:latest@sha256:a1ac4589a5f8136b616e667b48a0bea9719bb10bd45799ea946f24bbedfafde4
+    entrypoint: sh
+    command:
+      [
+        "-c",
+        'mkdir -p /data/langfuse && minio server --address ":9000" --console-address ":9001" /data',
+      ]
+    environment:
+      MINIO_ROOT_USER: trueswe
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Run npm run services:configure}
+    ports: ["127.0.0.1:3036:9000"]
+    volumes: [minio:/data]
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+volumes:
+  postgres:
+  clickhouse:
+  clickhouse-logs:
+  redis:
+  minio:
