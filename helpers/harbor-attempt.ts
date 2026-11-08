@@ -1,5 +1,7 @@
 import { readFile, writeFile, mkdir, cp, readdir } from "node:fs/promises";
-import { resolve, join } from "node:path";
+import { resolve, join, dirname } from "node:path";
+import { existsSync } from "node:fs";
+import { verifyTaskSnapshot } from "./task-snapshot.ts";
 import * as validation from "valibot";
 import { runExternalProcess } from "./child-process-io.ts";
 import { requireEnvironmentVariable } from "./local-langfuse.ts";
@@ -109,8 +111,20 @@ export async function executeHarborAttempt(
   const attemptDirectory = resolve(configuration.outputDirectory, "attempts", attempt.identifier);
   await mkdir(attemptDirectory, { recursive: true });
   const taskPath = join(attemptDirectory, "task");
-  await cp(resolve(task.path), taskPath, { recursive: true });
+  const snapshotDirectory = dirname(resolve(task.path));
+  if (existsSync(join(snapshotDirectory, "snapshot.json"))) {
+    const snapshot = await verifyTaskSnapshot(snapshotDirectory);
+    if (snapshot.identifier !== task.identifier || snapshot.split !== task.split)
+      throw new Error("Task snapshot identity or split does not match the experiment");
+    await cp(join(snapshotDirectory, "snapshot.json"), join(attemptDirectory, "snapshot.json"));
+  }
+  await cp(resolve(task.path), taskPath, { recursive: true, verbatimSymlinks: true });
   await cp(resolve(variant.instructionsPath), join(taskPath, "environment", "AGENTS.md"));
+  const dockerfilePath = join(taskPath, "environment", "Dockerfile");
+  await writeFile(
+    dockerfilePath,
+    (await readFile(dockerfilePath, "utf8")) + "\nCOPY AGENTS.md /app/AGENTS.md\n",
+  );
   const harborConfiguration = {
     job_name: "job",
     jobs_dir: attemptDirectory,
