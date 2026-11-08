@@ -61,10 +61,11 @@ export const experimentConfigurationSchema = validation.strictObject({
       validation.strictObject({ name: safeIdentifier, instructionsPath: validation.string() }),
     ),
     validation.minLength(1),
+    validation.maxLength(2),
   ),
   repetitions: validation.optional(positiveInteger, 3),
   limits: validation.strictObject({
-    attemptTimeoutSeconds: validation.pipe(positiveInteger, validation.maxValue(1100)),
+    attemptTimeoutSeconds: validation.pipe(positiveInteger, validation.maxValue(3000)),
     concurrency: positiveInteger,
   }),
   langfuse: validation.strictObject({
@@ -91,13 +92,35 @@ export interface AttemptRecord {
   outputTokens: number | null;
   costDollars: number | null;
   error: string | null;
+  exceptionType: string | null;
 }
 export interface ExperimentRecord {
-  schemaVersion: 1;
+  schemaVersion: 2;
   configurationHash: string;
   configuration: ExperimentConfiguration;
   createdAt: string;
   attempts: AttemptRecord[];
+  frozenInputs: FrozenExperimentInputs;
+  inputHash: string;
+}
+
+export interface FrozenExperimentInputs {
+  tasks: {
+    identifier: string;
+    contentHash: string;
+    snapshotHash: string | null;
+    issueUrl: string | null;
+    startingCommit: string | null;
+  }[];
+  variants: { name: string; instructionsHash: string; instructionsContent: string }[];
+  runtime: {
+    nodeVersion: string;
+    bendVersion: string;
+    harborVersion: string;
+    helperContentHash: string;
+    bendContentHash: string;
+    packageLockHash: string;
+  };
 }
 
 export function hashExperimentContent(content: string | Buffer): string {
@@ -112,6 +135,28 @@ export async function readExperimentConfiguration(path: string): Promise<Experim
   for (const profile of configuration.agents)
     if (profile.authentication.method === "api-key")
       registerCredentialEnvironmentReference(profile.authentication.keyEnvironment);
+  for (const [label, names] of [
+    ["task", configuration.tasks.map((task) => task.identifier)],
+    ["agent", configuration.agents.map((profile) => profile.name)],
+    ["variant", configuration.variants.map((variant) => variant.name)],
+  ] as const) {
+    if (new Set(names).size !== names.length)
+      throw new Error(`Duplicate experiment ${label} identifiers are not allowed`);
+  }
+  if (
+    configuration.variants.length === 2 &&
+    !["baseline", "candidate"].every((name) =>
+      configuration.variants.some((variant) => variant.name === name),
+    )
+  )
+    throw new Error("A comparison requires baseline and candidate variants");
+  const attemptCount =
+    configuration.tasks.length *
+    configuration.agents.length *
+    configuration.variants.length *
+    configuration.repetitions;
+  if (!Number.isSafeInteger(attemptCount) || attemptCount > 10_000)
+    throw new Error("Experiment exceeds the 10000 attempt limit");
   return configuration;
 }
 
@@ -129,10 +174,37 @@ export async function writeExperimentRecord(path: string, value: ExperimentRecor
 const nullableNumber = validation.nullable(validation.number());
 const nullableText = validation.nullable(validation.string());
 const experimentRecordSchema = validation.object({
-  schemaVersion: validation.literal(1),
+  schemaVersion: validation.literal(2),
   configurationHash: validation.string(),
   configuration: experimentConfigurationSchema,
   createdAt: validation.string(),
+  inputHash: validation.string(),
+  frozenInputs: validation.object({
+    tasks: validation.array(
+      validation.object({
+        identifier: validation.string(),
+        contentHash: validation.string(),
+        snapshotHash: nullableText,
+        issueUrl: nullableText,
+        startingCommit: nullableText,
+      }),
+    ),
+    variants: validation.array(
+      validation.object({
+        name: validation.string(),
+        instructionsHash: validation.string(),
+        instructionsContent: validation.string(),
+      }),
+    ),
+    runtime: validation.object({
+      nodeVersion: validation.string(),
+      bendVersion: validation.string(),
+      harborVersion: validation.string(),
+      helperContentHash: validation.string(),
+      bendContentHash: validation.string(),
+      packageLockHash: validation.string(),
+    }),
+  }),
   attempts: validation.array(
     validation.object({
       identifier: validation.string(),
@@ -158,6 +230,7 @@ const experimentRecordSchema = validation.object({
       outputTokens: nullableNumber,
       costDollars: nullableNumber,
       error: nullableText,
+      exceptionType: validation.optional(nullableText, null),
     }),
   ),
 });

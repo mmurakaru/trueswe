@@ -174,9 +174,10 @@ export async function createTaskSnapshot(requestPath: string): Promise<TaskSnaps
     const dockerfilePath = join(taskPath, "environment", "Dockerfile");
     const dockerfile = await readFile(dockerfilePath, "utf8");
     await writeFile(dockerfilePath, dockerfile + "\nWORKDIR /app\nCOPY repository/ /app/\n");
+    const environmentContract = await readFile(join(taskPath, "instruction.md"), "utf8");
     await writeFile(
       join(taskPath, "instruction.md"),
-      `# ${sourceIssue.title}\n\n${sourceIssue.body}\n\n## Source discussion\n\n${sourceIssue.comments.map((comment) => comment.body).join("\n\n")}\n`,
+      `# ${sourceIssue.title}\n\n${sourceIssue.body}\n\n## Source discussion\n\n${sourceIssue.comments.map((comment) => comment.body).join("\n\n")}\n\n## Task environment contract\n\n${environmentContract}\n`,
     );
     const metadata = {
       schemaVersion: 1 as const,

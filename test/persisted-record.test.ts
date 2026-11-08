@@ -12,7 +12,7 @@ test("record validation rejects incomplete attempts and an unsafe process budget
     await writeFile(path, JSON.stringify({ schemaVersion: 1, attempts: [{ state: "completed" }] }));
     await assert.rejects(readExperimentRecord(path));
     const configuration = JSON.parse(await readFile("examples/codex-smoke.json", "utf8"));
-    configuration.limits.attemptTimeoutSeconds = 1101;
+    configuration.limits.attemptTimeoutSeconds = 3001;
     await writeFile(path, JSON.stringify(configuration));
     await assert.rejects(readExperimentConfiguration(path));
   } finally {

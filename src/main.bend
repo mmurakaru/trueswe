@@ -38,12 +38,15 @@ def persist_decision(values: String & String, configuration: String, ordinal: U3
     output : String <- helper_output(result)
     return Unit{}
 
-def finalize_attempt(evidence: Maybe<&2, U32>, configuration: String, ordinal: U32) -> IO(Unit):
+def finalize_attempt(evidence: Maybe<&2, U32>, +configuration: String, +ordinal: U32) -> IO(Unit):
   match evidence:
     case None{}:
       IO.die(Unit, 1, "Integration helper returned invalid verification evidence")
     case Some{code}:
-      persist_decision(Attempt.attempt_record_values(Attempt.decide_attempt(code)), configuration, ordinal)
+      do IO<Unit>:
+        result : U32 & (String & String) <- invoke_helper(["exception", configuration, U32.show(ordinal)])
+        exception_name : String <- helper_output(result)
+        persist_decision(Attempt.attempt_record_values(Attempt.decide_attempt(code, exception_name)), configuration, ordinal)
 
 def execute_attempts(remaining: Nat, +ordinal: U32, +configuration: String) -> IO(Unit):
   match remaining:

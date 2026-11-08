@@ -1,9 +1,24 @@
 #!/usr/bin/env node
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
+if (process.argv.includes("--version")) {
+  console.log("harbor, version 0.25.0");
+  process.exit(0);
+}
 const configurationPath = process.argv[process.argv.indexOf("--config") + 1];
 const configuration = JSON.parse(await readFile(configurationPath, "utf8"));
 const fixture = JSON.parse(await readFile(process.argv[1] + ".result.json", "utf8"));
+if (fixture.rewardByInstruction) {
+  const instructions = await readFile(
+    join(configuration.tasks[0].path, "environment", "AGENTS.md"),
+    "utf8",
+  );
+  if (!(instructions in fixture.rewardByInstruction))
+    throw new Error("Unknown project instructions supplied to the agent");
+  fixture.verifier_result.rewards.reward = fixture.rewardByInstruction[instructions];
+}
+if (fixture.mutateInputPath)
+  await writeFile(fixture.mutateInputPath, "changed input during the experiment");
 if (fixture.interruptParent) {
   process.kill(process.ppid, "SIGTERM");
   setInterval(() => {}, 1000);

@@ -60,6 +60,10 @@ test("snapshot CLI freezes committed source and issue evidence, then detects cha
     await chmod(github, 0o700);
     const template = join(temporaryDirectory, "template");
     await cp("tasks/smoke", template, { recursive: true });
+    await writeFile(
+      join(template, "instruction.md"),
+      "Use /app as the workspace and preserve the public command contract.",
+    );
     await mkdir(join(template, "environment", "required-empty"));
     await mkdir(join(template, "environment", "repository"), { recursive: true });
     await writeFile(
@@ -127,6 +131,10 @@ test("snapshot CLI freezes committed source and issue evidence, then detects cha
     await writeFile(requestPath, JSON.stringify(request));
 
     assert.equal(snapshot.sourceIssue.body, issue.body);
+    assert.match(
+      await readFile(join(output, "task/instruction.md"), "utf8"),
+      /preserve the public command contract/,
+    );
     assert.equal(
       await readFile(join(output, "task/environment/repository/content.txt"), "utf8"),
       "committed source",
