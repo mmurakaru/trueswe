@@ -90,11 +90,18 @@ function harborProcessEnvironment(
   ]) {
     if (process.env[name]) environment[name] = process.env[name];
   }
-  if (profile.authentication.method === "subscription")
-    environment.CODEX_AUTH_JSON_PATH = requireEnvironmentVariable(
-      profile.authentication.credentialPathEnvironment,
-    );
-  else
+  if (profile.authentication.method === "subscription") {
+    if ("credentialPathEnvironment" in profile.authentication)
+      environment.CODEX_AUTH_JSON_PATH = requireEnvironmentVariable(
+        profile.authentication.credentialPathEnvironment,
+      );
+    else {
+      environment.CLAUDE_FORCE_OAUTH = "1";
+      environment.CLAUDE_CODE_OAUTH_TOKEN = requireEnvironmentVariable(
+        profile.authentication.tokenEnvironment,
+      );
+    }
+  } else
     environment[profile.authentication.keyEnvironment] = requireEnvironmentVariable(
       profile.authentication.keyEnvironment,
     );
@@ -136,6 +143,14 @@ export async function executeHarborAttempt(
     dockerfilePath,
     (await readFile(dockerfilePath, "utf8")) + "\nCOPY AGENTS.md /app/AGENTS.md\n",
   );
+  if (profile.name === "claude-code") {
+    await writeFile(join(taskPath, "environment", "CLAUDE.md"), "@AGENTS.md\n");
+    await writeFile(
+      dockerfilePath,
+      (await readFile(dockerfilePath, "utf8")) +
+        "\nRUN rm -f /app/CLAUDE.local.md /app/.claude/settings.json /app/.claude/settings.local.json /app/.mcp.json\nCOPY CLAUDE.md /app/CLAUDE.md\n",
+    );
+  }
   await stageAttemptSkills(record, attempt, taskPath);
   const harborConfiguration = {
     job_name: "job",
@@ -165,7 +180,11 @@ export async function executeHarborAttempt(
           1,
           Math.floor(configuration.limits.attemptTimeoutSeconds / 5),
         ),
-        kwargs: { version: profile.version, reasoning_effort: profile.reasoningEffort, config: {} },
+        kwargs: {
+          version: profile.version,
+          reasoning_effort: profile.reasoningEffort,
+          ...(profile.name === "codex" ? { config: {} } : {}),
+        },
       },
     ],
     tasks: [{ path: taskPath }],

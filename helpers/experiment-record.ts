@@ -22,14 +22,41 @@ const environmentReference = validation.pipe(
   validation.string(),
   validation.regex(/^[A-Z][A-Z0-9_]*$/),
 );
-const authenticationSchema = validation.variant("method", [
+const apiKeyAuthenticationSchema = validation.strictObject({
+  method: validation.literal("api-key"),
+  keyEnvironment: environmentReference,
+});
+const pinnedAgentVersionSchema = validation.pipe(
+  validation.string(),
+  validation.regex(/^\d+\.\d+\.\d+(?:[-+][a-zA-Z0-9.-]+)?$/),
+);
+const agentModelSchema = validation.pipe(validation.string(), validation.minLength(1));
+const nativeAgentProfileSchema = validation.variant("name", [
   validation.strictObject({
-    method: validation.literal("subscription"),
-    credentialPathEnvironment: environmentReference,
+    name: validation.literal("codex"),
+    model: agentModelSchema,
+    version: pinnedAgentVersionSchema,
+    reasoningEffort: validation.picklist(["minimal", "low", "medium", "high", "xhigh", "max"]),
+    authentication: validation.variant("method", [
+      apiKeyAuthenticationSchema,
+      validation.strictObject({
+        method: validation.literal("subscription"),
+        credentialPathEnvironment: environmentReference,
+      }),
+    ]),
   }),
   validation.strictObject({
-    method: validation.literal("api-key"),
-    keyEnvironment: environmentReference,
+    name: validation.literal("claude-code"),
+    model: agentModelSchema,
+    version: pinnedAgentVersionSchema,
+    reasoningEffort: validation.picklist(["low", "medium", "high", "xhigh", "max"]),
+    authentication: validation.variant("method", [
+      apiKeyAuthenticationSchema,
+      validation.strictObject({
+        method: validation.literal("subscription"),
+        tokenEnvironment: environmentReference,
+      }),
+    ]),
   }),
 ]);
 export const localLangfuseConnectionSchema = validation.strictObject({
@@ -61,21 +88,7 @@ export const experimentConfigurationSchema = validation.strictObject({
     ),
     validation.minLength(1),
   ),
-  agents: validation.pipe(
-    validation.array(
-      validation.strictObject({
-        name: validation.literal("codex"),
-        model: validation.pipe(validation.string(), validation.minLength(1)),
-        version: validation.pipe(
-          validation.string(),
-          validation.regex(/^\d+\.\d+\.\d+(?:[-+][a-zA-Z0-9.-]+)?$/),
-        ),
-        reasoningEffort: validation.picklist(["minimal", "low", "medium", "high", "xhigh", "max"]),
-        authentication: authenticationSchema,
-      }),
-    ),
-    validation.minLength(1),
-  ),
+  agents: validation.pipe(validation.array(nativeAgentProfileSchema), validation.minLength(1)),
   variants: validation.pipe(
     validation.array(
       validation.strictObject({
@@ -166,6 +179,8 @@ export async function readExperimentConfiguration(path: string): Promise<Experim
   for (const profile of configuration.agents)
     if (profile.authentication.method === "api-key")
       registerCredentialEnvironmentReference(profile.authentication.keyEnvironment);
+    else if ("tokenEnvironment" in profile.authentication)
+      registerCredentialEnvironmentReference(profile.authentication.tokenEnvironment);
   for (const [label, names] of [
     ["task", configuration.tasks.map((task) => task.identifier)],
     ["agent", configuration.agents.map((profile) => profile.name)],

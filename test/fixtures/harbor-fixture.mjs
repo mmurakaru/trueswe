@@ -8,6 +8,13 @@ if (process.argv.includes("--version")) {
 const configurationPath = process.argv[process.argv.indexOf("--config") + 1];
 const configuration = JSON.parse(await readFile(configurationPath, "utf8"));
 const fixture = JSON.parse(await readFile(process.argv[1] + ".result.json", "utf8"));
+for (const name of fixture.requiredEnvironmentNames ?? []) {
+  if (!process.env[name]) throw new Error(`Required fixture environment is missing: ${name}`);
+  console.log(process.env[name]);
+}
+for (const name of fixture.forbiddenEnvironmentNames ?? []) {
+  if (process.env[name]) throw new Error(`Unexpected fixture environment was forwarded: ${name}`);
+}
 if (fixture.rewardByInstruction) {
   const instructions = await readFile(
     join(configuration.tasks[0].path, "environment", "AGENTS.md"),
