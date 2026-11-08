@@ -25,6 +25,8 @@ await Promise.all(
     "compose.yml",
     "test",
     ".changeset",
+    ".env.example",
+    ".gitignore",
     ".oxlintrc.json",
     ".oxfmtrc.json",
     "package.json",
