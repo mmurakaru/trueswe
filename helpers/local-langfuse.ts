@@ -1,8 +1,16 @@
 import { LangfuseClient } from "@langfuse/client";
 import { LangfuseSpanProcessor } from "@langfuse/otel";
-import { setLangfuseTracerProvider, startObservation } from "@langfuse/tracing";
+import {
+  setLangfuseTracerProvider,
+  startObservation,
+  LangfuseOtelSpanAttributes,
+} from "@langfuse/tracing";
 import { TracerProvider } from "@opentelemetry/sdk-trace";
-import type { AttemptRecord, ExperimentConfiguration } from "./experiment-record.ts";
+import type {
+  AttemptRecord,
+  ExperimentConfiguration,
+  FrozenExperimentInputs,
+} from "./experiment-record.ts";
 
 export function requireEnvironmentVariable(name: string): string {
   const value = process.env[name];
@@ -10,7 +18,7 @@ export function requireEnvironmentVariable(name: string): string {
   return value;
 }
 
-function localLangfuseAddress(configuration: ExperimentConfiguration): string {
+function localLangfuseAddress(configuration: Pick<ExperimentConfiguration, "langfuse">): string {
   const address = new URL(configuration.langfuse.baseUrl);
   if (address.username || address.password || address.search || address.hash)
     throw new Error("Langfuse address must not include credentials, a query, or a fragment");
@@ -22,7 +30,9 @@ function localLangfuseAddress(configuration: ExperimentConfiguration): string {
   return address.href;
 }
 
-export function localLangfuseClient(configuration: ExperimentConfiguration): LangfuseClient {
+export function localLangfuseClient(
+  configuration: Pick<ExperimentConfiguration, "langfuse">,
+): LangfuseClient {
   return new LangfuseClient({
     baseUrl: localLangfuseAddress(configuration),
     publicKey: requireEnvironmentVariable("LANGFUSE_PUBLIC_KEY"),
@@ -31,7 +41,9 @@ export function localLangfuseClient(configuration: ExperimentConfiguration): Lan
   });
 }
 
-export async function checkLocalLangfuse(configuration: ExperimentConfiguration): Promise<void> {
+export async function checkLocalLangfuse(
+  configuration: Pick<ExperimentConfiguration, "langfuse">,
+): Promise<void> {
   const client = localLangfuseClient(configuration);
   const projects = await client.api.projects.get({}, { timeoutInSeconds: 10, maxRetries: 0 });
   if (!projects.data.some((project) => project.id === configuration.langfuse.projectIdentifier))
@@ -41,6 +53,7 @@ export async function checkLocalLangfuse(configuration: ExperimentConfiguration)
 export async function recordLangfuseAttempt(
   configuration: ExperimentConfiguration,
   attempt: AttemptRecord,
+  skills: FrozenExperimentInputs["skills"],
 ): Promise<string> {
   const processor = new LangfuseSpanProcessor({
     baseUrl: localLangfuseAddress(configuration),
@@ -52,6 +65,7 @@ export async function recordLangfuseAttempt(
   const provider = new TracerProvider({ spanProcessors: [processor] });
   setLangfuseTracerProvider(provider);
   try {
+    const availability = JSON.stringify(skills.map(({ name, version }) => ({ name, version })));
     const observation = startObservation(
       `trueswe/${attempt.identifier}`,
       {
@@ -69,10 +83,38 @@ export async function recordLangfuseAttempt(
           inputTokens: attempt.inputTokens,
           outputTokens: attempt.outputTokens,
           costDollars: attempt.costDollars,
+          skillLoadEvidence: attempt.skillLoadEvidence,
+          skillLoads: attempt.skillLoads,
+          skillSupply: skills.map(({ name, version, contentHash }) => ({
+            name,
+            version,
+            contentHash,
+          })),
+          skillCatalogExposure: skills.length > 0 ? "unknown" : "not-supplied",
         },
       },
       { startTime: attempt.startedAt ? new Date(attempt.startedAt) : new Date() },
     );
+    observation.otelSpan.setAttribute(
+      LangfuseOtelSpanAttributes.OBSERVATION_SKILLS_AVAILABLE,
+      availability,
+    );
+    for (const load of attempt.skillLoads) {
+      const event = observation.startObservation(
+        "skill_read",
+        {
+          input: { skillName: load.name, path: load.path.split(`/skills/${load.name}/`)[1] },
+          output: { success: true },
+          metadata: { eventReference: load.eventReference },
+        },
+        { asType: "tool" },
+      );
+      event.otelSpan.setAttribute(
+        LangfuseOtelSpanAttributes.OBSERVATION_SKILLS_AVAILABLE,
+        availability,
+      );
+      event.end();
+    }
     const traceIdentifier = observation.traceId;
     observation.end(attempt.finishedAt ? new Date(attempt.finishedAt) : undefined);
     await provider.forceFlush();

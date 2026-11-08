@@ -3,6 +3,15 @@ import { resolve, relative } from "node:path";
 import type { ExperimentRecord } from "./experiment-record.ts";
 import { summarizeExperimentComparison } from "./comparison-summary.ts";
 
+function skillLoadReport(attempt: ExperimentRecord["attempts"][number]): string[] {
+  return [
+    `  Skill loads: ${attempt.skillLoadEvidence}.`,
+    ...attempt.skillLoads.map(
+      (load) => `  ${load.name} version ${load.version}: ${load.eventReference}.`,
+    ),
+  ];
+}
+
 export async function writeExperimentReport(record: ExperimentRecord): Promise<void> {
   const lines = [
     `# ${record.configuration.name}`,
@@ -48,7 +57,19 @@ export async function writeExperimentReport(record: ExperimentRecord): Promise<v
     lines.push(
       `- [${variant.name} instructions](frozen/instructions/${variant.name}.md): ${variant.instructionsHash}.`,
     );
-  lines.push("", "## Attempts", "");
+  lines.push("", "## Skills", "");
+  for (const skill of record.frozenInputs.skills)
+    lines.push(
+      `- ${skill.variantName}: ${skill.name} version ${skill.version}, ${skill.contentHash}.`,
+    );
+  lines.push(
+    "Project skill files are supplied to the agent discovery directory and verified during image construction.",
+    "Agent catalog exposure is unknown without native evidence.",
+    "A successful file read does not prove that the agent followed the skill.",
+    "",
+    "## Attempts",
+    "",
+  );
   for (const attempt of record.attempts) {
     lines.push(
       `- ${attempt.identifier}: ${attempt.state}, ${attempt.outcome ?? "no verified outcome"}.`,
@@ -62,6 +83,7 @@ export async function writeExperimentReport(record: ExperimentRecord): Promise<v
         `  [Langfuse](${record.configuration.langfuse.baseUrl}/project/${record.configuration.langfuse.projectIdentifier}/traces/${attempt.traceIdentifier})`,
       );
     if (attempt.error) lines.push(`  ${attempt.error.replaceAll("\n", " ")}`);
+    lines.push(...skillLoadReport(attempt));
     lines.push(
       `  Duration: ${attempt.durationSeconds ?? "unknown"} seconds. Input tokens: ${attempt.inputTokens ?? "unknown"}. Output tokens: ${attempt.outputTokens ?? "unknown"}. Cost: ${attempt.costDollars ?? "unknown"}.`,
     );
