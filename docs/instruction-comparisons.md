@@ -3,6 +3,10 @@
 An experiment selects a fixed task set and agent profile, then supplies explicit baseline and candidate instruction files.
 The default is three attempts per task, agent, and variant.
 Time limits cover the whole Harbor attempt, including setup and verification; cleanup has a short grace period.
+The native agent budget is half that total, with one fifth each for agent setup and verification.
+Image construction and orchestration share the remaining time and any unused phase time.
+An image build or setup that exhausts the total deadline produces an interruption.
+An agent that exhausts its own budget can still reach the independent verifier.
 The concurrency value is an upper limit.
 The Bend runner executes attempts sequentially in this release.
 

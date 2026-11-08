@@ -11,6 +11,7 @@ import type {
 import { verifyTaskSnapshot } from "./task-snapshot.ts";
 import { runExternalProcess } from "./child-process-io.ts";
 import { requireEnvironmentVariable } from "./local-langfuse.ts";
+import { harborProgramPath } from "./harbor-runtime.ts";
 
 export function frozenTaskDirectory(
   configuration: ExperimentConfiguration,
@@ -28,7 +29,7 @@ export function frozenInstructionPath(
 async function readRuntimeIdentity(): Promise<FrozenExperimentInputs["runtime"]> {
   const root = fileURLToPath(new URL("../", import.meta.url));
   const harbor = await runExternalProcess(
-    process.env.TRUESWE_HARBOR ?? join(root, ".tools/harbor-venv/bin/harbor"),
+    harborProgramPath(),
     ["--version"],
     { PATH: process.env.PATH, HOME: process.env.HOME },
     15_000,
@@ -68,7 +69,7 @@ export async function freezeExperimentInputs(
         throw new Error("Task snapshot identity or split does not match the experiment");
       const contentHash = await fingerprintDirectory(original);
       const destination = frozenTaskDirectory(configuration, task.identifier);
-      await cp(original, destination, { recursive: true });
+      await cp(original, destination, { recursive: true, verbatimSymlinks: true });
       if ((await fingerprintDirectory(destination)) !== contentHash)
         throw new Error(`Task changed while freezing: ${task.identifier}`);
       let snapshotHash: string | null = null;

@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { resolve, dirname } from "node:path";
 import {
   readExperimentConfiguration,
@@ -26,7 +26,10 @@ export async function prepareExperiment(configurationPath: string): Promise<numb
       "Experiment output already exists or cannot be created; choose a new output directory",
     );
   }
-  const frozenInputs = await freezeExperimentInputs(configuration);
+  const frozenInputs = await freezeExperimentInputs(configuration).catch(async (error: unknown) => {
+    await rm(outputDirectory, { recursive: true, force: true });
+    throw error;
+  });
   const attempts: AttemptRecord[] = [];
   for (const task of configuration.tasks)
     for (const profile of configuration.agents)
@@ -53,7 +56,6 @@ export async function prepareExperiment(configurationPath: string): Promise<numb
             exceptionType: null,
           });
         }
-  if (attempts.length > 10_000) throw new Error("Experiment exceeds the 10000 attempt limit");
   const record: ExperimentRecord = {
     schemaVersion: 2,
     configurationHash: hashExperimentContent(JSON.stringify(configuration)),
@@ -109,6 +111,7 @@ export async function finalizeExperimentOrdinal(
         ? "interrupted"
         : "execution-error";
   attempt.outcome = outcome === "pass" ? "pass" : outcome === "fail" ? "fail" : null;
+  if (attempt.state === "execution-error" && !attempt.error) attempt.error = attempt.exceptionType;
   await writeExperimentRecord(experimentRecordPath(configuration), record);
   try {
     attempt.traceIdentifier = await recordLangfuseAttempt(configuration, attempt);

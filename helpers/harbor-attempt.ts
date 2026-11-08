@@ -12,6 +12,7 @@ import {
   registerCredentialEnvironmentReference,
 } from "./secret-redaction.ts";
 import type { ExperimentRecord, AttemptRecord } from "./experiment-record.ts";
+import { harborProgramPath } from "./harbor-runtime.ts";
 
 const harborResultSchema = validation.object({
   verifier_environment_mode: validation.nullable(validation.picklist(["separate", "shared"])),
@@ -51,7 +52,6 @@ function applyHarborTrial(
 ): number {
   const rewards = trial.verifier_result?.rewards;
   attempt.exceptionType = trial.exception_info?.exception_type ?? null;
-  if (attempt.exceptionType) attempt.error = attempt.exceptionType;
   attempt.trajectoryPath = join(resultDirectory, "agent", "trajectory.json");
   attempt.inputTokens = trial.agent_result?.n_input_tokens ?? null;
   attempt.outputTokens = trial.agent_result?.n_output_tokens ?? null;
@@ -121,7 +121,10 @@ export async function executeHarborAttempt(
       throw new Error("Task snapshot identity or split does not match the experiment");
     await cp(join(snapshotDirectory, "snapshot.json"), join(attemptDirectory, "snapshot.json"));
   }
-  await cp(frozenTaskDirectory(configuration, task.identifier), taskPath, { recursive: true });
+  await cp(frozenTaskDirectory(configuration, task.identifier), taskPath, {
+    recursive: true,
+    verbatimSymlinks: true,
+  });
   await cp(
     frozenInstructionPath(configuration, variant.name),
     join(taskPath, "environment", "AGENTS.md"),
@@ -138,6 +141,9 @@ export async function executeHarborAttempt(
     n_concurrent_trials: 1,
     retry: { max_retries: 0 },
     environment: { type: "docker", delete: true },
+    verifier: {
+      override_timeout_sec: Math.max(1, Math.floor(configuration.limits.attemptTimeoutSeconds / 5)),
+    },
     agents: [
       {
         name: profile.name,
@@ -145,8 +151,14 @@ export async function executeHarborAttempt(
         ...(profile.authentication.method === "api-key"
           ? { model_api_key_name: profile.authentication.keyEnvironment }
           : {}),
-        override_timeout_sec: configuration.limits.attemptTimeoutSeconds,
-        override_setup_timeout_sec: configuration.limits.attemptTimeoutSeconds,
+        override_timeout_sec: Math.max(
+          1,
+          Math.floor(configuration.limits.attemptTimeoutSeconds / 2),
+        ),
+        override_setup_timeout_sec: Math.max(
+          1,
+          Math.floor(configuration.limits.attemptTimeoutSeconds / 5),
+        ),
         kwargs: { version: profile.version, reasoning_effort: profile.reasoningEffort, config: {} },
       },
     ],
@@ -162,7 +174,7 @@ export async function executeHarborAttempt(
   let evidenceCode = 0;
   try {
     const result = await runExternalProcess(
-      process.env.TRUESWE_HARBOR ?? resolve(".tools/harbor-venv/bin/harbor"),
+      harborProgramPath(),
       ["run", "--config", configurationPath],
       harborProcessEnvironment(record, attempt),
       configuration.limits.attemptTimeoutSeconds * 1000,

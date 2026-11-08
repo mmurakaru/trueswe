@@ -65,7 +65,7 @@ export const experimentConfigurationSchema = validation.strictObject({
   ),
   repetitions: validation.optional(positiveInteger, 3),
   limits: validation.strictObject({
-    attemptTimeoutSeconds: validation.pipe(positiveInteger, validation.maxValue(1100)),
+    attemptTimeoutSeconds: validation.pipe(positiveInteger, validation.maxValue(3000)),
     concurrency: positiveInteger,
   }),
   langfuse: validation.strictObject({

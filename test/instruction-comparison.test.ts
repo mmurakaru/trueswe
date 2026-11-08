@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, writeFile, cp, chmod, rm } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile, cp, chmod, rm, access } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { launchExperimentCommand } from "./command-test-support.ts";
@@ -47,6 +47,25 @@ test("comparison CLI runs three attempts per variant and stops changed instructi
     const plan = await launchExperimentCommand(["plan", configurationPath], environment);
     assert.equal(plan.status, 0, plan.output);
     assert.equal(JSON.parse(plan.output).attempts, 6);
+    configuration.variants[1].instructionsPath = join(
+      temporaryDirectory,
+      "missing-instructions.md",
+    );
+    await writeFile(configurationPath, JSON.stringify(configuration));
+    const failedPreparation = await launchExperimentCommand(
+      ["run", configurationPath],
+      environment,
+    );
+    assert.notEqual(failedPreparation.status, 0);
+    assert.equal(
+      await access(configuration.outputDirectory).then(
+        () => true,
+        () => false,
+      ),
+      false,
+    );
+    configuration.variants[1].instructionsPath = candidatePath;
+    await writeFile(configurationPath, JSON.stringify(configuration));
     const execution = await launchExperimentCommand(["run", configurationPath], environment);
     assert.equal(execution.status, 0, execution.output);
     const record: ExperimentRecord = JSON.parse(

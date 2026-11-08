@@ -68,6 +68,19 @@ test("CLI preserves independently verified outcomes and distinguishes execution 
         );
         assert.equal(record.attempts[0]?.state, expectedState);
         assert.equal(record.attempts[0]?.outcome, expectedOutcome);
+        if (expectedState === "completed") assert.equal(record.attempts[0]?.error, null);
+        const nativeConfiguration = JSON.parse(
+          await readFile(
+            join(configuration.outputDirectory, "attempts/addition-codex-baseline-1/harbor.json"),
+            "utf8",
+          ),
+        );
+        assert.ok(
+          nativeConfiguration.agents[0].override_timeout_sec +
+            nativeConfiguration.agents[0].override_setup_timeout_sec +
+            nativeConfiguration.verifier.override_timeout_sec <
+            configuration.limits.attemptTimeoutSeconds,
+        );
         assert.equal(record.attempts[0]?.costDollars, null);
         assert.ok(record.attempts[0]?.traceIdentifier);
         if (name === "failing")
