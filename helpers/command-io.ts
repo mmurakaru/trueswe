@@ -42,6 +42,27 @@ try {
   } else if (process.argv[2] === "comparison-facts" && process.argv[3]) {
     const { readComparisonFacts } = await import("./experiment-io.ts");
     process.stdout.write(String(await readComparisonFacts(process.argv[3])));
+  } else if (
+    ["prepare-resume", "prepare-recovery"].includes(process.argv[2] ?? "") &&
+    process.argv[3]
+  ) {
+    const { prepareResume } = await import("./experiment-io.ts");
+    process.stdout.write(
+      String(await prepareResume(process.argv[3], process.argv[2] === "prepare-resume")),
+    );
+  } else if (
+    ["attempt-state", "recover-attempt", "retry-attempt"].includes(process.argv[2] ?? "") &&
+    process.argv[3] &&
+    process.argv[4]
+  ) {
+    const { readAttemptState, recoverExperimentOrdinal, retryExperimentOrdinal } =
+      await import("./experiment-io.ts");
+    const ordinal = Number(process.argv[4]);
+    if (process.argv[2] === "attempt-state")
+      process.stdout.write(await readAttemptState(process.argv[3], ordinal));
+    else if (process.argv[2] === "recover-attempt")
+      process.stdout.write(String(await recoverExperimentOrdinal(process.argv[3], ordinal)));
+    else await retryExperimentOrdinal(process.argv[3], ordinal);
   } else if (process.argv[2] === "prepare" && process.argv[3]) {
     const { prepareExperiment } = await import("./experiment-io.ts");
     process.stdout.write(String(await prepareExperiment(process.argv[3])));

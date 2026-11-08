@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFile, writeFile, mkdir, access } from "node:fs/promises";
+import { readFile, writeFile, mkdir, access, appendFile } from "node:fs/promises";
 import { join } from "node:path";
 if (process.argv.includes("--version")) {
   console.log("harbor, version 0.25.0");
@@ -34,6 +34,31 @@ async function waitForRelease(path, remaining = 500) {
 }
 if (fixture.waitForFile && configuration.jobs_dir.endsWith("-2"))
   await waitForRelease(fixture.waitForFile);
+if (fixture.invocationsPath)
+  await appendFile(fixture.invocationsPath, configuration.jobs_dir + "\n");
+if (fixture.pauseOnRepetition && configuration.jobs_dir.endsWith(`-${fixture.pauseOnRepetition}`)) {
+  const trial = join(configuration.jobs_dir, configuration.job_name, "trial");
+  await mkdir(join(trial, "agent"), { recursive: true });
+  await writeFile(
+    join(trial, "config.json"),
+    JSON.stringify({ trial_name: "trial", task: { path: configuration.tasks[0].path } }),
+  );
+  await writeFile(
+    join(trial, "agent", "trajectory.json"),
+    JSON.stringify({
+      steps: [{ step_id: 1, source: "agent", message: "Work before interruption" }],
+    }),
+  );
+  if (fixture.writeResultBeforePause)
+    await writeFile(join(trial, "result.json"), JSON.stringify(fixture));
+  if (fixture.ignoreTermination) process.on("SIGTERM", () => {});
+  await writeFile(fixture.readyPath, configuration.jobs_dir);
+  await new Promise(() => {
+    setInterval(() => {}, 1000);
+  });
+}
+if (fixture.failOnRepetition && configuration.jobs_dir.endsWith(`-${fixture.failOnRepetition}`))
+  fixture.verifier_result.rewards.reward = 0;
 if (fixture.rewardByInstruction) {
   const instructions = await readFile(
     join(configuration.tasks[0].path, "environment", "AGENTS.md"),

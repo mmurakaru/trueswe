@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir, cp, readdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, cp, readdir, rm } from "node:fs/promises";
 import { resolve, join, dirname } from "node:path";
 import { existsSync } from "node:fs";
 import { verifyTaskSnapshot } from "./task-snapshot.ts";
@@ -6,13 +6,22 @@ import { frozenTaskDirectory, frozenInstructionPath } from "./experiment-freeze.
 import * as validation from "valibot";
 import { runExternalProcess } from "./child-process-io.ts";
 import { requireEnvironmentVariable } from "./local-langfuse.ts";
-import { writeExperimentRecord, experimentRecordPath } from "./experiment-record.ts";
+import {
+  writeExperimentRecord,
+  experimentRecordPath,
+  attemptExecutionDirectory,
+} from "./experiment-record.ts";
 import {
   redactRuntimeSecrets,
   registerCredentialEnvironmentReference,
 } from "./secret-redaction.ts";
 import type { ExperimentRecord, AttemptRecord } from "./experiment-record.ts";
 import { harborProgramPath } from "./harbor-runtime.ts";
+import {
+  createExecutionOwner,
+  stopOwnedExecution,
+  cleanupOwnedTaskResources,
+} from "./owned-execution.ts";
 import { stageAttemptSkills } from "./skill-supply.ts";
 import { frozenSkillDirectory } from "./managed-skills.ts";
 
@@ -34,7 +43,7 @@ const harborResultSchema = validation.object({
 });
 
 async function findHarborResult(directory: string): Promise<string | null> {
-  const entries = await readdir(directory, { withFileTypes: true });
+  const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
   const directories = entries.filter((entry) => entry.isDirectory());
   const candidates = await Promise.all(
     directories.map(async (entry) => {
@@ -120,7 +129,7 @@ export async function executeHarborAttempt(
     throw new Error("Attempt references an unknown experiment input");
   if (profile.authentication.method === "api-key")
     registerCredentialEnvironmentReference(profile.authentication.keyEnvironment);
-  const attemptDirectory = resolve(configuration.outputDirectory, "attempts", attempt.identifier);
+  const attemptDirectory = attemptExecutionDirectory(record, attempt);
   await mkdir(attemptDirectory, { recursive: true });
   const taskPath = join(attemptDirectory, "task");
   const snapshotDirectory = dirname(resolve(task.path));
@@ -130,6 +139,7 @@ export async function executeHarborAttempt(
       throw new Error("Task snapshot identity or split does not match the experiment");
     await cp(join(snapshotDirectory, "snapshot.json"), join(attemptDirectory, "snapshot.json"));
   }
+  await rm(taskPath, { recursive: true, force: true });
   await cp(frozenTaskDirectory(configuration, task.identifier), taskPath, {
     recursive: true,
     verbatimSymlinks: true,
@@ -214,24 +224,28 @@ export async function executeHarborAttempt(
   await writeExperimentRecord(experimentRecordPath(configuration), record);
   let evidenceCode = 0;
   try {
+    const owner = createExecutionOwner(attemptDirectory);
     const result = await runExternalProcess(
       harborProgramPath(),
       ["run", "--config", configurationPath],
-      harborProcessEnvironment(record, attempt),
+      { ...harborProcessEnvironment(record, attempt), TRUESWE_EXECUTION_TOKEN: owner.token },
       configuration.limits.attemptTimeoutSeconds * 1000,
+      owner.save,
     );
     await writeFile(
       join(attemptDirectory, "harbor.log"),
       redactRuntimeSecrets(result.output + "\n" + result.errors),
     );
-    const resultDirectory = result.timedOut
-      ? null
-      : await findHarborResult(join(attemptDirectory, "job"));
-    if (result.timedOut) {
-      evidenceCode = 3;
-      attempt.error = "Harbor attempt exceeded its process deadline";
-    } else if (!resultDirectory) {
-      attempt.error = "Harbor did not produce a trial result";
+    const resultDirectory = await findHarborResult(join(attemptDirectory, "job"));
+    if (result.status !== 0 || result.timedOut) {
+      attempt.warnings.push(...(await cleanupOwnedTaskResources(attemptDirectory)));
+      await discoverInterruptedTrajectory(attempt, attemptDirectory);
+    }
+    if (!resultDirectory) {
+      evidenceCode = result.timedOut ? 3 : 0;
+      attempt.error = result.timedOut
+        ? "Harbor attempt stopped before a complete verifier result was recorded"
+        : "Harbor did not produce a trial result";
     } else {
       const trial = validation.parse(
         harborResultSchema,
@@ -247,5 +261,50 @@ export async function executeHarborAttempt(
   attempt.finishedAt = new Date().toISOString();
   attempt.durationSeconds = (Date.parse(attempt.finishedAt) - Date.parse(attempt.startedAt)) / 1000;
   await writeExperimentRecord(experimentRecordPath(configuration), record);
+  return evidenceCode;
+}
+
+async function discoverInterruptedTrajectory(
+  attempt: AttemptRecord,
+  directory: string,
+): Promise<void> {
+  const trials = await readdir(join(directory, "job"), { withFileTypes: true }).catch(() => []);
+  const copies = await readdir(join(directory, "interrupted-agent"), { withFileTypes: true }).catch(
+    () => [],
+  );
+  const paths = [
+    join(directory, "interrupted-agent", "trajectory.json"),
+    ...copies
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => join(directory, "interrupted-agent", entry.name, "trajectory.json")),
+    ...trials
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => join(directory, "job", entry.name, "agent", "trajectory.json")),
+  ];
+  attempt.trajectoryPath = paths.find((path) => existsSync(path)) ?? null;
+}
+
+export async function recoverHarborAttempt(
+  record: ExperimentRecord,
+  attempt: AttemptRecord,
+): Promise<number> {
+  const directory = attemptExecutionDirectory(record, attempt);
+  await stopOwnedExecution(directory);
+  attempt.warnings.push(...(await cleanupOwnedTaskResources(directory)));
+  let evidenceCode = 3;
+  const resultDirectory = await findHarborResult(join(directory, "job"));
+  if (resultDirectory) {
+    try {
+      const trial = validation.parse(
+        harborResultSchema,
+        JSON.parse(await readFile(join(resultDirectory, "result.json"), "utf8")),
+      );
+      evidenceCode = applyHarborTrial(attempt, trial, resultDirectory);
+    } catch {
+      attempt.error = "Interrupted Harbor result is incomplete or invalid";
+    }
+  } else attempt.error = "Execution stopped before a complete verifier result was recorded";
+  if (!attempt.trajectoryPath) await discoverInterruptedTrajectory(attempt, directory);
+  await writeExperimentRecord(experimentRecordPath(record.configuration), record);
   return evidenceCode;
 }

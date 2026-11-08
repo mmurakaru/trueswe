@@ -1,5 +1,6 @@
 import { withFileRecordLock } from "./file-record-lock.ts";
 import { readFile } from "node:fs/promises";
+import { relative, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import * as validation from "valibot";
 import {
@@ -44,6 +45,7 @@ async function boundReview(
 ): Promise<ReviewRecord> {
   const review = await readReviewRecord(context.path);
   if (
+    review.executionNumber !== context.attempt.executionNumber ||
     review.experimentHash !== context.record.configurationHash ||
     review.attemptIdentifier !== context.attempt.identifier ||
     review.traceIdentifier !== context.attempt.traceIdentifier
@@ -104,6 +106,7 @@ export async function prepareAttemptReview(
   await withFileRecordLock(context.path, async () => {
     const review: ReviewRecord = (await existingReview(context)) ?? {
       schemaVersion: 1,
+      executionNumber: context.attempt.executionNumber,
       experimentHash: context.record.configurationHash,
       attemptIdentifier: request.attemptIdentifier,
       traceIdentifier: context.attempt.traceIdentifier,
@@ -176,7 +179,8 @@ export async function finalizeAttemptReview(
                 status: judgment.status,
                 confidence: judgment.confidence,
                 model: judgment.modelIdentity,
-                localReview: `reviews/${request.attemptIdentifier}.json`,
+                localReview: relative(resolve(context.configuration.outputDirectory), context.path),
+                executionNumber: context.attempt.executionNumber,
               },
             },
           ],
@@ -263,7 +267,8 @@ export async function recordHumanLabel(requestPath: string, status: string): Pro
                 status: decision.status,
                 evidenceReference: decision.evidenceReference,
                 confirmedAt: decision.confirmedAt,
-                localReview: `reviews/${request.attemptIdentifier}.json`,
+                localReview: relative(resolve(context.configuration.outputDirectory), context.path),
+                executionNumber: context.attempt.executionNumber,
               },
             },
           ],

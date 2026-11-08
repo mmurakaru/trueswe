@@ -1,4 +1,6 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { readExperimentConfiguration } from "../helpers/experiment-record.ts";
+import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { fingerprintDirectory } from "../helpers/directory-fingerprint.ts";
@@ -52,15 +54,81 @@ await withFileRecordLock(executablePath, async () => {
     rmSync(temporaryPath, { force: true });
   }
 });
-const result = spawnSync(executablePath, argumentsList, {
-  stdio: "inherit",
-  env: {
-    ...process.env,
-    TRUESWE_ROOT: projectRoot,
-    TRUESWE_BEND_VERSION: version.stdout.trim(),
-    TRUESWE_BEND_SOURCE_HASH: sourceHash,
-    BEND_NO_TELEMETRY: "1",
-  },
-});
-if (result.error) console.error(`Bend launch failed: ${result.error.message}. Run pnpm run setup.`);
-process.exit(result.status ?? 1);
+const nativeEnvironment = {
+  ...process.env,
+  TRUESWE_ROOT: projectRoot,
+  TRUESWE_BEND_VERSION: version.stdout.trim(),
+  TRUESWE_BEND_SOURCE_HASH: sourceHash,
+  BEND_NO_TELEMETRY: "1",
+};
+let receivedSignal: NodeJS.Signals | null = null;
+async function launchNative(nativeArguments: string[], forwardSignals: boolean): Promise<number> {
+  return new Promise((complete, reject) => {
+    const child = spawn(executablePath, nativeArguments, {
+      stdio: "inherit",
+      env: nativeEnvironment,
+      detached: true,
+    });
+    let killTimer: NodeJS.Timeout | undefined;
+    const escalation = Promise.withResolvers<void>();
+    const stop = (signal: NodeJS.Signals) => {
+      receivedSignal = signal;
+      if (!child.pid) return;
+      try {
+        process.kill(-child.pid, signal);
+      } catch {
+        return;
+      }
+      killTimer ??= setTimeout(() => {
+        try {
+          process.kill(-child.pid!, "SIGKILL");
+        } catch {
+          /* The native process group has exited. */
+        }
+        escalation.resolve();
+      }, 8000);
+    };
+    const interrupt = () => stop("SIGINT");
+    const terminate = () => stop("SIGTERM");
+    if (forwardSignals) {
+      process.on("SIGINT", interrupt);
+      process.on("SIGTERM", terminate);
+    }
+    const cleanup = () => {
+      clearTimeout(killTimer);
+      process.removeListener("SIGINT", interrupt);
+      process.removeListener("SIGTERM", terminate);
+    };
+    child.once("error", (error) => {
+      cleanup();
+      reject(error);
+    });
+    child.once("close", async (status) => {
+      if (killTimer) await escalation.promise;
+      cleanup();
+      complete(status ?? 1);
+    });
+  });
+}
+async function runCommand(): Promise<number> {
+  const status = await launchNative(argumentsList, true);
+  if (receivedSignal && argumentsList[1]) {
+    console.error("Preserving interrupted experiment evidence.");
+    await launchNative(["recover", argumentsList[1]], false);
+    return receivedSignal === "SIGINT" ? 130 : 143;
+  }
+  return status;
+}
+try {
+  if (["run", "resume", "recover"].includes(argumentsList[0] ?? "") && argumentsList[1]) {
+    const configuration = await readExperimentConfiguration(argumentsList[1]);
+    process.exitCode = await withFileRecordLock(
+      `${resolve(configuration.outputDirectory)}.operation`,
+      runCommand,
+      false,
+    );
+  } else process.exitCode = await launchNative(argumentsList, true);
+} catch (error) {
+  console.error(error instanceof Error ? error.message : "Command failed");
+  process.exitCode = 1;
+}

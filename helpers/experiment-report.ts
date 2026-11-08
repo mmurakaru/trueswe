@@ -20,7 +20,7 @@ async function humanReviewReport(record: ExperimentRecord): Promise<string[]> {
   for (const review of reviews) {
     const judgment = review.judgments.at(-1);
     lines.push(
-      `- [${review.attemptIdentifier} review](reviews/${review.attemptIdentifier}.json): ${review.status}. Suggestion: ${judgment?.category ?? "unknown"}, confidence ${judgment?.confidence ?? "unknown"}.`,
+      `- [${review.attemptIdentifier} review](reviews/${review.attemptIdentifier}${review.executionNumber > 1 ? `-retry-${review.executionNumber}` : ""}.json): ${review.status}. Suggestion: ${judgment?.category ?? "unknown"}, confidence ${judgment?.confidence ?? "unknown"}.`,
     );
     lines.push(
       `  Human decision: ${review.decision?.status ?? "pending"}. Accepted category: ${review.decision?.status === "accepted" ? review.decision.category : "none"}.`,
@@ -41,6 +41,25 @@ function skillLoadReport(attempt: ExperimentRecord["attempts"][number]): string[
       (load) => `  ${load.name} version ${load.version}: ${load.eventReference}.`,
     ),
   ];
+}
+
+function executionHistoryReport(
+  record: ExperimentRecord,
+  attempt: ExperimentRecord["attempts"][number],
+): string[] {
+  const lines: string[] = [];
+  for (const execution of attempt.executionHistory) {
+    lines.push(
+      `  Previous execution ${execution.executionNumber}: ${execution.state}, ${execution.outcome ?? "no verified outcome"}.`,
+    );
+    if (execution.trajectoryPath)
+      lines.push(
+        `  [Previous trajectory](${relative(resolve(record.configuration.outputDirectory), execution.trajectoryPath)})`,
+      );
+    if (execution.error) lines.push(`  ${execution.error.replaceAll("\n", " ")}`);
+  }
+  for (const warning of attempt.warnings) lines.push(`  ${warning}`);
+  return lines;
 }
 
 async function writeExperimentReportSnapshot(record: ExperimentRecord): Promise<void> {
@@ -114,6 +133,7 @@ async function writeExperimentReportSnapshot(record: ExperimentRecord): Promise<
         `  [Langfuse](${record.configuration.langfuse.baseUrl}/project/${record.configuration.langfuse.projectIdentifier}/traces/${attempt.traceIdentifier})`,
       );
     if (attempt.error) lines.push(`  ${attempt.error.replaceAll("\n", " ")}`);
+    lines.push(...executionHistoryReport(record, attempt));
     lines.push(...skillLoadReport(attempt));
     lines.push(
       `  Duration: ${attempt.durationSeconds ?? "unknown"} seconds. Input tokens: ${attempt.inputTokens ?? "unknown"}. Output tokens: ${attempt.outputTokens ?? "unknown"}. Cost: ${attempt.costDollars ?? "unknown"}.`,
