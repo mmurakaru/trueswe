@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "name": "claude-code-smoke",
+  "outputDirectory": "results/claude-code-smoke",
+  "tasks": [
+    {
+      "identifier": "addition",
+      "path": "tasks/smoke",
+      "split": "development"
+    }
+  ],
+  "agents": [
+    {
+      "name": "claude-code",
+      "model": "anthropic/claude-sonnet-5-5",
+      "version": "2.1.319",
+      "reasoningEffort": "medium",
+      "authentication": {
+        "method": "api-key",
+        "keyEnvironment": "ANTHROPIC_API_KEY"
+      }
+    }
+  ],
+  "variants": [
+    {
+      "name": "baseline",
+      "instructionsPath": "examples/baseline-instructions.md"
+    }
+  ],
+  "repetitions": 1,
+  "limits": {
+    "attemptTimeoutSeconds": 300,
+    "concurrency": 1
+  },
+  "langfuse": {
+    "baseUrl": "http://127.0.0.1:3035",
+    "projectIdentifier": "trueswe"
+  }
+}
