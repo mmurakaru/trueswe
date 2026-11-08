@@ -25,6 +25,7 @@ jobs:
         with:
           version-script: npm run version:prepare
           pr-title: "Release: version TrueSWE"
+          pr-draft: always
           commit-message: "Release: version TrueSWE"
           github-token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
         env:
