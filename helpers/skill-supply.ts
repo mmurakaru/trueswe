@@ -14,7 +14,6 @@ export async function stageAttemptSkills(
   attempt: AttemptRecord,
   taskDirectory: string,
 ): Promise<void> {
-  if (record.frozenInputs.skills.length === 0) return;
   const destination = nativeProjectSkillDirectories.get(attempt.agentName);
   if (!destination) throw new Error("Agent has no supported project skill discovery path");
   const selected = record.frozenInputs.skills.filter(
@@ -41,7 +40,7 @@ export async function stageAttemptSkills(
   await writeFile(join(context, "trueswe-skill-checksums.txt"), checksums.join("\n") + "\n");
   const dockerfile = join(context, "Dockerfile");
   const existing = await readFile(dockerfile, "utf8");
-  const cleanDirectories = "RUN rm -rf /app/.agents/skills /app/.claude/skills /app/.grok/skills\n";
+  const cleanDirectories = "RUN rm -rf /app/.agents /app/.claude /app/.codex /app/.grok\n";
   const supply =
     selected.length > 0
       ? `COPY trueswe-skills/ ${destination}/\nCOPY trueswe-skill-checksums.txt /tmp/trueswe-skill-checksums.txt\nRUN cd ${destination} && sha256sum --check /tmp/trueswe-skill-checksums.txt\n`
