@@ -14,6 +14,7 @@ import {
   writeReviewRecord,
   reviewRecordPath,
   experimentReviews,
+  withReviewRecordLock,
 } from "./review-record.ts";
 import type { ReviewRecord } from "./review-record.ts";
 import { readReviewEvidence, registerCredentialFileValues } from "./review-evidence.ts";
@@ -62,7 +63,10 @@ async function existingReview(
   }
 }
 
-export async function prepareAttemptReview(requestPath: string): Promise<number> {
+export async function prepareAttemptReview(
+  requestPath: string,
+  identifier: string,
+): Promise<number> {
   const request = validation.parse(
     reviewRequestSchema,
     JSON.parse(await readFile(requestPath, "utf8")),
@@ -73,21 +77,12 @@ export async function prepareAttemptReview(requestPath: string): Promise<number>
   );
   registerCredentialEnvironmentReference(request.keyEnvironment);
   const evidence = await readReviewEvidence(context.record, context.attempt);
-  const review: ReviewRecord = (await existingReview(context)) ?? {
-    schemaVersion: 1,
-    experimentHash: context.record.configurationHash,
-    attemptIdentifier: request.attemptIdentifier,
-    traceIdentifier: context.attempt.traceIdentifier,
-    createdAt: new Date().toISOString(),
-    humanScoreIdentifier: randomUUID(),
-    status: "pending",
-    judgments: [],
-    decision: null,
-    decisions: [],
-    exportError: null,
-  };
   const judgment: ReviewRecord["judgments"][number] = {
-    identifier: randomUUID(),
+    identifier: validation.parse(
+      validation.pipe(validation.string(), validation.uuid()),
+      identifier,
+    ),
+    status: "pending",
     requestedModel: request.model,
     keyEnvironment: request.keyEnvironment,
     modelIdentity: null,
@@ -106,13 +101,32 @@ export async function prepareAttemptReview(requestPath: string): Promise<number>
     request.keyEnvironment,
     evidence.trajectoryAvailable,
   );
-  review.judgments.push(judgment);
-  review.status = "pending";
-  await writeReviewRecord(context.path, review);
+  await withReviewRecordLock(context.path, async () => {
+    const review: ReviewRecord = (await existingReview(context)) ?? {
+      schemaVersion: 1,
+      experimentHash: context.record.configurationHash,
+      attemptIdentifier: request.attemptIdentifier,
+      traceIdentifier: context.attempt.traceIdentifier,
+      createdAt: new Date().toISOString(),
+      humanScoreIdentifier: randomUUID(),
+      status: "pending",
+      judgments: [],
+      decision: null,
+      decisions: [],
+      exportError: null,
+    };
+    review.judgments.push(judgment);
+    review.status = "pending";
+    await writeReviewRecord(context.path, review);
+  });
   return confidence;
 }
 
-export async function finalizeAttemptReview(requestPath: string, status: string): Promise<void> {
+export async function finalizeAttemptReview(
+  requestPath: string,
+  status: string,
+  identifier: string,
+): Promise<void> {
   const request = validation.parse(
     reviewRequestSchema,
     JSON.parse(await readFile(requestPath, "utf8")),
@@ -121,44 +135,48 @@ export async function finalizeAttemptReview(requestPath: string, status: string)
     request.experimentConfigurationPath,
     request.attemptIdentifier,
   );
-  const review = await boundReview(context);
-  review.status = validation.parse(validation.picklist(["suggested", "manual-review"]), status);
-  const judgment = review.judgments.at(-1);
-  if (!judgment) throw new Error("Review has no recorded judgment");
-  await writeReviewRecord(context.path, review);
-  if (review.traceIdentifier) {
-    try {
-      const response = await localLangfuseClient(context.configuration).api.scores.create(
-        [
-          {
-            id: judgment.identifier,
-            traceId: review.traceIdentifier,
-            name: "jev-review-category",
-            value: judgment.category ?? "manual-review",
-            dataType: "CATEGORICAL",
-            timestamp: judgment.createdAt,
-            comment: "Unconfirmed review suggestion",
-            metadata: {
-              status: review.status,
-              confidence: judgment.confidence,
-              model: judgment.modelIdentity,
-              localReview: `reviews/${request.attemptIdentifier}.json`,
+  await withReviewRecordLock(context.path, async () => {
+    const review = await boundReview(context);
+    const judgment = review.judgments.find((item) => item.identifier === identifier);
+    if (!judgment) throw new Error("Review has no matching judgment");
+    judgment.status = validation.parse(validation.picklist(["suggested", "manual-review"]), status);
+    if (review.judgments.at(-1)?.identifier === identifier) review.status = judgment.status;
+    await writeReviewRecord(context.path, review);
+    if (review.traceIdentifier) {
+      try {
+        const response = await localLangfuseClient(context.configuration).api.scores.create(
+          [
+            {
+              id: judgment.identifier,
+              traceId: review.traceIdentifier,
+              name: "jev-review-category",
+              value: judgment.category ?? "manual-review",
+              dataType: "CATEGORICAL",
+              timestamp: judgment.createdAt,
+              comment: "Unconfirmed review suggestion",
+              metadata: {
+                status: judgment.status,
+                confidence: judgment.confidence,
+                model: judgment.modelIdentity,
+                localReview: `reviews/${request.attemptIdentifier}.json`,
+              },
             },
-          },
-        ],
-        { timeoutInSeconds: 10, maxRetries: 0 },
-      );
-      if ("rejected" in response && response.rejected > 0)
-        throw new Error("Langfuse rejected the review score");
-    } catch {
-      judgment.exportError = "Local Langfuse review export failed; the local judgment is preserved";
+          ],
+          { timeoutInSeconds: 10, maxRetries: 0 },
+        );
+        if ("rejected" in response && response.rejected > 0)
+          throw new Error("Langfuse rejected the review score");
+      } catch {
+        judgment.exportError =
+          "Local Langfuse review export failed; the local judgment is preserved";
+      }
     }
-  }
-  await writeReviewRecord(context.path, review);
-  await writeExperimentReport(context.record);
-  console.log(
-    `${request.attemptIdentifier}: ${review.status}. No category is accepted without human confirmation.`,
-  );
+    await writeReviewRecord(context.path, review);
+    await writeExperimentReport(context.record);
+    console.log(
+      `${request.attemptIdentifier}: ${judgment.status}. No category is accepted without human confirmation.`,
+    );
+  });
 }
 
 export async function readHumanLabelAction(requestPath: string): Promise<string> {
@@ -192,57 +210,59 @@ export async function recordHumanLabel(requestPath: string, status: string): Pro
     request.experimentConfigurationPath,
     request.attemptIdentifier,
   );
-  const review = await boundReview(context);
-  await registerCredentialFileValues(context.record);
-  for (const judgment of review.judgments)
-    registerCredentialEnvironmentReference(judgment.keyEnvironment);
-  if (status === "accepted" && !request.category)
-    throw new Error("Accepted human labels require a category");
-  const decision: NonNullable<ReviewRecord["decision"]> = {
-    action: request.decision,
-    status: validation.parse(validation.picklist(["accepted", "rejected"]), status),
-    category: status === "accepted" ? (request.category ?? null) : null,
-    evidenceReference: request.evidenceReference,
-    explanation: redactRuntimeSecrets(request.explanation),
-    confirmedAt: new Date().toISOString(),
-  };
-  review.decision = decision;
-  review.decisions.push(decision);
-  await writeReviewRecord(context.path, review);
-  if (review.traceIdentifier) {
-    try {
-      const response = await localLangfuseClient(context.configuration).api.scores.create(
-        [
-          {
-            id: review.humanScoreIdentifier,
-            traceId: review.traceIdentifier,
-            name: "human-review-decision",
-            value: decision.category ?? "rejected",
-            dataType: "CATEGORICAL",
-            timestamp: review.createdAt,
-            comment: decision.explanation,
-            metadata: {
-              action: decision.action,
-              status: decision.status,
-              evidenceReference: decision.evidenceReference,
-              confirmedAt: decision.confirmedAt,
-              localReview: `reviews/${request.attemptIdentifier}.json`,
+  await withReviewRecordLock(context.path, async () => {
+    const review = await boundReview(context);
+    await registerCredentialFileValues(context.record);
+    for (const judgment of review.judgments)
+      registerCredentialEnvironmentReference(judgment.keyEnvironment);
+    if (status === "accepted" && !request.category)
+      throw new Error("Accepted human labels require a category");
+    const decision: NonNullable<ReviewRecord["decision"]> = {
+      action: request.decision,
+      status: validation.parse(validation.picklist(["accepted", "rejected"]), status),
+      category: status === "accepted" ? (request.category ?? null) : null,
+      evidenceReference: request.evidenceReference,
+      explanation: redactRuntimeSecrets(request.explanation),
+      confirmedAt: new Date().toISOString(),
+    };
+    review.decision = decision;
+    review.decisions.push(decision);
+    await writeReviewRecord(context.path, review);
+    if (review.traceIdentifier) {
+      try {
+        const response = await localLangfuseClient(context.configuration).api.scores.create(
+          [
+            {
+              id: review.humanScoreIdentifier,
+              traceId: review.traceIdentifier,
+              name: "human-review-decision",
+              value: decision.category ?? "rejected",
+              dataType: "CATEGORICAL",
+              timestamp: review.createdAt,
+              comment: decision.explanation,
+              metadata: {
+                action: decision.action,
+                status: decision.status,
+                evidenceReference: decision.evidenceReference,
+                confirmedAt: decision.confirmedAt,
+                localReview: `reviews/${request.attemptIdentifier}.json`,
+              },
             },
-          },
-        ],
-        { timeoutInSeconds: 10, maxRetries: 0 },
-      );
-      if ("rejected" in response && response.rejected > 0)
-        throw new Error("Langfuse rejected the human review score");
-      review.exportError = null;
-    } catch {
-      review.exportError =
-        "Local Langfuse human review export failed; the local decision is preserved";
+          ],
+          { timeoutInSeconds: 10, maxRetries: 0 },
+        );
+        if ("rejected" in response && response.rejected > 0)
+          throw new Error("Langfuse rejected the human review score");
+        review.exportError = null;
+      } catch {
+        review.exportError =
+          "Local Langfuse human review export failed; the local decision is preserved";
+      }
     }
-  }
-  await writeReviewRecord(context.path, review);
-  await writeExperimentReport(context.record);
-  console.log(`${request.attemptIdentifier}: human decision ${decision.status}.`);
+    await writeReviewRecord(context.path, review);
+    await writeExperimentReport(context.record);
+    console.log(`${request.attemptIdentifier}: human decision ${decision.status}.`);
+  });
 }
 
 export async function listExperimentReviews(configurationPath: string): Promise<void> {

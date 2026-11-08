@@ -2,6 +2,7 @@ import * as validation from "valibot";
 import { readFile, writeFile, mkdir, rename, access } from "node:fs/promises";
 import { resolve, dirname } from "node:path";
 import type { ExperimentRecord } from "./experiment-record.ts";
+import { lock } from "proper-lockfile";
 
 const identifierSchema = validation.pipe(
   validation.string(),
@@ -53,6 +54,10 @@ const humanDecisionSchema = validation.object({
   confirmedAt: validation.string(),
 });
 const judgmentSchema = validation.object({
+  status: validation.optional(
+    validation.picklist(["pending", "suggested", "manual-review"]),
+    "manual-review",
+  ),
   identifier: validation.string(),
   requestedModel: validation.string(),
   keyEnvironment: validation.string(),
@@ -80,6 +85,24 @@ export const reviewRecordSchema = validation.object({
   exportError: validation.nullable(validation.string()),
 });
 export type ReviewRecord = validation.InferOutput<typeof reviewRecordSchema>;
+
+export async function withReviewRecordLock<T>(
+  path: string,
+  operation: () => Promise<T>,
+): Promise<T> {
+  await mkdir(dirname(path), { recursive: true });
+  const release = await lock(path, {
+    realpath: false,
+    stale: 60_000,
+    update: 5000,
+    retries: { retries: 600, minTimeout: 25, maxTimeout: 100, factor: 1 },
+  });
+  try {
+    return await operation();
+  } finally {
+    await release();
+  }
+}
 
 export function reviewRecordPath(record: ExperimentRecord, identifier: string): string {
   validation.parse(identifierSchema, identifier);

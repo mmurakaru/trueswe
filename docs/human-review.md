@@ -18,6 +18,8 @@ The label request needs a recorded evidence reference and an explanation.
 Accepted and changed decisions need a category.
 Rejected decisions create no accepted category.
 Repeated review requests and human decisions preserve their histories separately.
+Concurrent requests use a lock for each attempt's record and finalize their own judgment identifiers.
+A human decision recorded while Jev is running remains in the history.
 
 Each attempt's review record lives under `reviews/` inside its experiment directory.
 The Markdown report links that record and shows the current human decision separately from the latest suggestion.

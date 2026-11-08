@@ -7,12 +7,20 @@ try {
       await readFile(new URL("../package.json", import.meta.url), "utf8"),
     );
     console.log(`trueswe ${manifest.version}`);
-  } else if (process.argv[2] === "prepare-review" && process.argv[3]) {
+  } else if (process.argv[2] === "review-identifier") {
+    const { randomUUID } = await import("node:crypto");
+    process.stdout.write(randomUUID());
+  } else if (process.argv[2] === "prepare-review" && process.argv[3] && process.argv[4]) {
     const { prepareAttemptReview } = await import("./review-io.ts");
-    process.stdout.write(String(await prepareAttemptReview(process.argv[3])));
-  } else if (process.argv[2] === "finalize-review" && process.argv[3] && process.argv[4]) {
+    process.stdout.write(String(await prepareAttemptReview(process.argv[3], process.argv[4])));
+  } else if (
+    process.argv[2] === "finalize-review" &&
+    process.argv[3] &&
+    process.argv[4] &&
+    process.argv[5]
+  ) {
     const { finalizeAttemptReview } = await import("./review-io.ts");
-    await finalizeAttemptReview(process.argv[3], process.argv[4]);
+    await finalizeAttemptReview(process.argv[3], process.argv[4], process.argv[5]);
   } else if (process.argv[2] === "label-action" && process.argv[3]) {
     const { readHumanLabelAction } = await import("./review-io.ts");
     process.stdout.write(await readHumanLabelAction(process.argv[3]));

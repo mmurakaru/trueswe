@@ -15,10 +15,27 @@ test("Jev suggestions and explicit human labels preserve verified outcomes and r
   const received: string[] = [];
   let confidence = 0.9;
   let apiFailure = false;
+  let gate: { received: number; release: Promise<void>; reached: () => void } | null = null;
+  const gateRelease = Promise.withResolvers<void>();
+  const concurrentCalls: ReturnType<typeof launchExperimentCommand>[] = [];
   const server = createServer(async (request, response) => {
     const chunks: Buffer[] = [];
     for await (const chunk of request) chunks.push(Buffer.from(chunk));
-    received.push(Buffer.concat(chunks).toString());
+    const payload = Buffer.concat(chunks).toString();
+    received.push(payload);
+    const submitted: { model: string } = JSON.parse(payload);
+    const responseConfidence =
+      submitted.model === "jev-fixture-high"
+        ? 0.9
+        : submitted.model === "jev-fixture-low"
+          ? 0.55
+          : confidence;
+    const activeGate = gate;
+    if (activeGate) {
+      activeGate.received += 1;
+      if (activeGate.received === 2) activeGate.reached();
+      await activeGate.release;
+    }
     assert.equal(request.url, "/v1/systemone");
     response.writeHead(apiFailure ? 503 : 200, { "content-type": "application/json" });
     response.end(
@@ -31,13 +48,13 @@ test("Jev suggestions and explicit human labels preserve verified outcomes and r
                 reviewCategory: {
                   type: "choice",
                   choice: "wrong-path",
-                  confidence,
+                  confidence: responseConfidence,
                   probabilities: {
-                    "wrong-path": confidence,
-                    "tool-failure": (1 - confidence) / 4,
-                    "missing-context": (1 - confidence) / 4,
-                    "task-misunderstanding": (1 - confidence) / 4,
-                    none: (1 - confidence) / 4,
+                    "wrong-path": responseConfidence,
+                    "tool-failure": (1 - responseConfidence) / 4,
+                    "missing-context": (1 - responseConfidence) / 4,
+                    "task-misunderstanding": (1 - responseConfidence) / 4,
+                    none: (1 - responseConfidence) / 4,
                   },
                 },
               },
@@ -192,7 +209,54 @@ test("Jev suggestions and explicit human labels preserve verified outcomes and r
     const invalid = await launchExperimentCommand(["label", labelPath], environment);
     assert.notEqual(invalid.status, 0);
     assert.match(invalid.output, /recorded evidence reference/);
+    async function verifyConcurrentReviews(): Promise<void> {
+      apiFailure = false;
+      const bothRequests = Promise.withResolvers<void>();
+      gate = { received: 0, release: gateRelease.promise, reached: bothRequests.resolve };
+      const highPath = join(directory, "review-high.json");
+      const lowPath = join(directory, "review-low.json");
+      const commonRequest = {
+        schemaVersion: 1,
+        experimentConfigurationPath: configurationPath,
+        attemptIdentifier: identifier,
+        keyEnvironment: "CUSTOM_ROUTER_AUTH",
+      };
+      await writeFile(highPath, JSON.stringify({ ...commonRequest, model: "jev-fixture-high" }));
+      await writeFile(lowPath, JSON.stringify({ ...commonRequest, model: "jev-fixture-low" }));
+      concurrentCalls.push(
+        launchExperimentCommand(["review", highPath], environment),
+        launchExperimentCommand(["review", lowPath], environment),
+      );
+      await bothRequests.promise;
+      label.decision = "change";
+      label.category = "missing-context";
+      label.evidenceReference = "trajectory:step:1";
+      label.explanation = "A human confirmed the context gap while automatic reviews were running.";
+      await writeFile(labelPath, JSON.stringify(label));
+      const overlappingLabel = await launchExperimentCommand(["label", labelPath], environment);
+      assert.equal(overlappingLabel.status, 0, overlappingLabel.output);
+      gateRelease.resolve();
+      const overlappingReviews = await Promise.all(concurrentCalls);
+      for (const result of overlappingReviews) assert.equal(result.status, 0, result.output);
+      review = JSON.parse(await readFile(reviewPath, "utf8"));
+      assert.equal(review.judgments.length, 5);
+      assert.equal(new Set(review.judgments.map((judgment) => judgment.identifier)).size, 5);
+      assert.equal(review.decisions.length, 4);
+      assert.equal(review.decision?.category, "missing-context");
+      assert.equal(
+        review.judgments.find((judgment) => judgment.requestedModel === "jev-fixture-high")?.status,
+        "suggested",
+      );
+      assert.equal(
+        review.judgments.find((judgment) => judgment.requestedModel === "jev-fixture-low")?.status,
+        "manual-review",
+      );
+      assert.equal(review.status, review.judgments.at(-1)?.status);
+    }
+    await verifyConcurrentReviews();
   } finally {
+    gateRelease.resolve();
+    await Promise.allSettled(concurrentCalls);
     await langfuse.close();
     await new Promise<void>((resolve, reject) =>
       server.close((error) => (error ? reject(error) : resolve())),
