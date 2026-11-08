@@ -164,7 +164,7 @@ export async function verifyFrozenExperimentInputs(record: ExperimentRecord): Pr
       if (
         (await fingerprintDirectory(
           frozenSkillDirectory(record.configuration, skill.variantName, skill.name),
-        )) !== skill.contentHash
+        )) !== skill.directoryHash
       )
         throw new Error(`Frozen skill input changed: ${skill.name}`);
     }),

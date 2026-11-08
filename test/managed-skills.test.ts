@@ -1,9 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, writeFile, cp, chmod, rm, mkdir } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile, cp, chmod, rm, mkdir, access } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { launchExperimentCommand } from "./command-test-support.ts";
 import { startLocalLangfuseFixture } from "./local-langfuse-test-support.ts";
 import { observeSkillLoads } from "../helpers/skill-load-evidence.ts";
@@ -18,6 +19,25 @@ test("managed skill CLI publishes complete bundles, pins selectors and rejects m
     const source = "---\nname: test-skill\ndescription: Test skill\n---\nRead the task.\n";
     await writeFile(join(skillDirectory, "SKILL.md"), source);
     await writeFile(join(skillDirectory, "reference.md"), "Complete resource bundle");
+    execFileSync("git", ["init", "--quiet", directory]);
+    execFileSync("git", ["-C", directory, "add", "skill"]);
+    execFileSync("git", [
+      "-C",
+      directory,
+      "-c",
+      "user.name=Test fixture",
+      "-c",
+      "user.email=fixture@example.test",
+      "-c",
+      "commit.gpgsign=false",
+      "commit",
+      "--quiet",
+      "-m",
+      "skill fixture",
+    ]);
+    const sourceRevision = execFileSync("git", ["-C", directory, "rev-parse", "HEAD"], {
+      encoding: "utf8",
+    }).trim();
     const environment: NodeJS.ProcessEnv = {
       ...process.env,
       LANGFUSE_PUBLIC_KEY: "pk-lf-test",
@@ -38,6 +58,7 @@ test("managed skill CLI publishes complete bundles, pins selectors and rejects m
     const publication = await launchExperimentCommand(["publish-skill", requestPath], environment);
     assert.equal(publication.status, 0, publication.output);
     assert.match(publication.output, /"version": 1/);
+    assert.match(publication.output, new RegExp(sourceRevision));
     await writeFile(join(skillDirectory, "LICENSE"), "Preserve this file");
     const unsupported = await launchExperimentCommand(["publish-skill", requestPath], environment);
     assert.notEqual(unsupported.status, 0);
@@ -50,6 +71,10 @@ test("managed skill CLI publishes complete bundles, pins selectors and rejects m
     const missing = await launchExperimentCommand(["publish-skill", requestPath], environment);
     assert.notEqual(missing.status, 0);
     assert.match(missing.output, /support file is missing/);
+    await writeFile(join(skillDirectory, "SKILL.md"), source + "[Bad link](foo%zz.md)\n");
+    const malformed = await launchExperimentCommand(["publish-skill", requestPath], environment);
+    assert.notEqual(malformed.status, 0);
+    assert.match(malformed.output, /resource link is malformed/);
     await writeFile(join(skillDirectory, "SKILL.md"), source);
     await writeFile(join(skillDirectory, "run.sh"), "#!/bin/sh\necho skill\n", { mode: 0o755 });
     const executable = await launchExperimentCommand(["publish-skill", requestPath], environment);
@@ -114,6 +139,7 @@ test("managed skill CLI publishes complete bundles, pins selectors and rejects m
       await readFile(join(configuration.outputDirectory, "experiment.json"), "utf8"),
     );
     assert.equal(record.frozenInputs.skills[0]?.version, 1);
+    assert.match(publication.output, new RegExp(record.frozenInputs.skills[0]!.contentHash));
     assert.equal(record.frozenInputs.skills[0]?.files.length, 2);
     assert.equal(record.attempts[0]?.skillLoadEvidence, "not-supplied");
     assert.equal(record.attempts[1]?.skillLoadEvidence, "observed");
@@ -145,10 +171,17 @@ test("managed skill CLI publishes complete bundles, pins selectors and rejects m
     const mixed = await launchExperimentCommand(["run", configurationPath], environment);
     assert.notEqual(mixed.status, 0);
     assert.match(mixed.output, /change only instructions or only skills/);
-    const rejected: ExperimentRecord = JSON.parse(
-      await readFile(join(configuration.outputDirectory, "experiment.json"), "utf8"),
+    assert.equal(
+      await access(configuration.outputDirectory).then(
+        () => true,
+        () => false,
+      ),
+      false,
     );
-    assert.ok(rejected.attempts.every((attempt) => attempt.state === "pending"));
+    configuration.variants[1].instructionsPath = "examples/baseline-instructions.md";
+    await writeFile(configurationPath, JSON.stringify(configuration));
+    const corrected = await launchExperimentCommand(["run", configurationPath], environment);
+    assert.equal(corrected.status, 0, corrected.output);
     await writeFile(
       join(skillDirectory, "SKILL.md"),
       source +
@@ -156,6 +189,7 @@ test("managed skill CLI publishes complete bundles, pins selectors and rejects m
     );
     const examples = await launchExperimentCommand(["publish-skill", requestPath], environment);
     assert.equal(examples.status, 0, examples.output);
+    assert.match(examples.output, /"sourceRevision": null/);
     await writeFile(join(skillDirectory, "SKILL.md"), source);
   } finally {
     await langfuse.close();
@@ -174,6 +208,7 @@ test("skill evidence requires a matched successful read with exact content ident
         name: "test-skill",
         version: 3,
         contentHash: "bundle-hash",
+        directoryHash: "directory-hash",
         files: [
           { path: "SKILL.md", sha256Hash: createHash("sha256").update(content).digest("base64") },
         ],

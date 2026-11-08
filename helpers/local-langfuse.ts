@@ -30,7 +30,9 @@ function localLangfuseAddress(configuration: Pick<ExperimentConfiguration, "lang
   return address.href;
 }
 
-export function localLangfuseClient(configuration: Pick<ExperimentConfiguration, "langfuse">): LangfuseClient {
+export function localLangfuseClient(
+  configuration: Pick<ExperimentConfiguration, "langfuse">,
+): LangfuseClient {
   return new LangfuseClient({
     baseUrl: localLangfuseAddress(configuration),
     publicKey: requireEnvironmentVariable("LANGFUSE_PUBLIC_KEY"),

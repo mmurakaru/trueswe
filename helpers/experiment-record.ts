@@ -141,6 +141,7 @@ export interface FrozenExperimentInputs {
     name: string;
     version: number;
     contentHash: string;
+    directoryHash: string;
     files: { path: string; sha256Hash: string }[];
   }[];
   runtime: {
@@ -233,6 +234,7 @@ const experimentRecordSchema = validation.object({
           name: validation.string(),
           version: validation.number(),
           contentHash: validation.string(),
+          directoryHash: validation.string(),
           files: validation.array(
             validation.object({ path: validation.string(), sha256Hash: validation.string() }),
           ),

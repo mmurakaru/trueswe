@@ -1,5 +1,6 @@
 import Base
 
+# Bits 4/1/2 encode skill comparison/equal instructions/equal skills to separate helper facts from Bend policy.
 def comparison_allowed(facts: U32) -> Bool:
   match facts:
     case 2:

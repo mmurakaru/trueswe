@@ -157,3 +157,14 @@ export async function readComparisonFacts(configurationPath: string): Promise<nu
     (new Set(skills).size === 1 ? 2 : 0)
   );
 }
+
+export async function discardPreparedExperiment(configurationPath: string): Promise<void> {
+  const configuration = await readExperimentConfiguration(configurationPath);
+  const record = await readExperimentRecord(experimentRecordPath(configuration));
+  if (
+    record.configurationHash !== hashExperimentContent(JSON.stringify(configuration)) ||
+    record.attempts.some((attempt) => attempt.state !== "pending")
+  )
+    throw new Error("Only the matching unstarted experiment can be discarded");
+  await rm(resolve(configuration.outputDirectory), { recursive: true });
+}

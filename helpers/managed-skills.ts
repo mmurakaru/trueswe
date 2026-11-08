@@ -48,7 +48,12 @@ function validateManagedSkillLinks(files: ManagedSkillFiles, paths: Set<string>)
     }
     for (const target of links) {
       if (/^[a-z][a-z0-9+.-]*:/i.test(target) || target.startsWith("#")) continue;
-      const decoded = decodeURIComponent(target.split(/[?#]/)[0] ?? "");
+      let decoded: string;
+      try {
+        decoded = decodeURIComponent(target.split(/[?#]/)[0] ?? "");
+      } catch {
+        throw new Error(`Managed skill resource link is malformed: ${file.path} -> ${target}`);
+      }
       const path = posix.normalize(posix.join(posix.dirname(file.path), decoded));
       if (decoded.startsWith("/") || !paths.has(path))
         throw new Error(
@@ -142,7 +147,9 @@ export async function publishManagedSkill(
   );
   if (request.labels.includes("latest"))
     throw new Error("Langfuse manages the latest label automatically");
-  const files = await collectManagedSkillFiles(resolve(request.skillDirectory));
+  const files = (await collectManagedSkillFiles(resolve(request.skillDirectory))).toSorted(
+    (left, right) => left.path.localeCompare(right.path),
+  );
   const metadata = validateManagedSkillFiles(files);
   const revision = await runExternalProcess(
     "git",
@@ -150,7 +157,24 @@ export async function publishManagedSkill(
     { PATH: process.env.PATH, HOME: process.env.HOME },
     5000,
   );
-  const sourceRevision = revision.status === 0 ? revision.output.trim() : null;
+  const status = await runExternalProcess(
+    "git",
+    [
+      "-C",
+      resolve(request.skillDirectory),
+      "status",
+      "--porcelain",
+      "--untracked-files=all",
+      "--",
+      ".",
+    ],
+    { PATH: process.env.PATH, HOME: process.env.HOME },
+    5000,
+  );
+  const sourceRevision =
+    revision.status === 0 && status.status === 0 && !status.output.trim()
+      ? revision.output.trim()
+      : null;
   await checkLocalLangfuse(request);
   const client = localLangfuseClient(request);
   const published = await client.api.skills.createVersion(
@@ -248,7 +272,10 @@ export async function freezeManagedSkills(
             variantName: variant.name,
             name: skill.name,
             version: skill.version,
-            contentHash: await fingerprintDirectory(directory),
+            contentHash: hashExperimentContent(
+              JSON.stringify(files.toSorted((left, right) => left.path.localeCompare(right.path))),
+            ),
+            directoryHash: await fingerprintDirectory(directory),
             files: skill.files.map((file) => ({ path: file.path, sha256Hash: file.sha256Hash })),
           };
         }),

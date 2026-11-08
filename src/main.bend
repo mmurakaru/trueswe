@@ -72,7 +72,10 @@ def execute_comparison(allowed: Bool, count: String, configuration: String) -> I
     case True{}:
       execute_prepared(U32.read(count), configuration)
     case False{}:
-      IO.die(Unit, 2, "A comparison must change only instructions or only skills")
+      do IO<Unit>:
+        result : U32 & (String & String) <- invoke_helper(["discard-prepared", configuration])
+        output : String <- helper_output(result)
+        IO.die(Unit, 2, "A comparison must change only instructions or only skills")
 
 def validate_comparison(facts: Maybe<&2, U32>, count: String, configuration: String) -> IO(Unit):
   match facts:
