@@ -28,7 +28,7 @@ function localLangfuseAddress(configuration: Pick<ExperimentConfiguration, "lang
     !["http:", "https:"].includes(address.protocol)
   )
     throw new Error("Langfuse must use a local loopback address");
-  return address.href;
+  return address.href.replace(/\/+$/, "");
 }
 
 export function localLangfuseClient(

@@ -1,6 +1,15 @@
 import { createServer } from "node:http";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import { createHash } from "node:crypto";
 import { gunzipSync } from "node:zlib";
+
+function redirectDuplicatePathSlashes(request: IncomingMessage, response: ServerResponse): boolean {
+  if (!request.url?.startsWith("//")) return false;
+  request.resume();
+  response.writeHead(308, { location: request.url.replace(/\/+/g, "/") });
+  response.end();
+  return true;
+}
 
 export async function startLocalLangfuseFixture(
   options: { observationsUnavailable?: boolean } = {},
@@ -18,6 +27,7 @@ export async function startLocalLangfuseFixture(
   const versions: Record<string, unknown>[] = [];
   const selections: string[] = [];
   const server = createServer(async (request, response) => {
+    if (redirectDuplicatePathSlashes(request, response)) return;
     if (request.url?.startsWith("/api/public/v2/observations")) {
       request.resume();
       response.writeHead(options.observationsUnavailable ? 503 : 200, {
