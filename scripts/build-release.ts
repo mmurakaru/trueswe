@@ -14,6 +14,7 @@ await rm(stage, { recursive: true, force: true });
 await mkdir(stage, { recursive: true });
 await Promise.all(
   [
+    ".github/assets",
     "src",
     "helpers",
     "scripts",
