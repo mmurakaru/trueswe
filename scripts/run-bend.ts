@@ -13,6 +13,8 @@ const compilation = spawnSync(compiler, compilerArguments, {
   stdio: "inherit",
   env: { ...process.env, BEND_NO_TELEMETRY: "1" },
 });
+if (compilation.error)
+  console.error(`Bend compiler launch failed: ${compilation.error.message}. Run npm run setup.`);
 if (compilation.status !== 0 || argumentsList.includes("--check-only"))
   process.exit(compilation.status ?? 1);
 const result = spawnSync(`${projectRoot}.tools/trueswe`, argumentsList, {

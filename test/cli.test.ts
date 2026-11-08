@@ -20,3 +20,12 @@ test("Bend CLI reports the installed application version", () => {
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /trueswe \d+\.\d+\.\d+/);
 });
+
+test("Bend CLI explains how to install a missing compiler", () => {
+  const result = spawnSync(process.execPath, ["scripts/run-bend.ts", "--help"], {
+    encoding: "utf8",
+    env: { ...process.env, TRUESWE_BEND: "/missing/trueswe-bend-compiler" },
+  });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Run npm run setup/);
+});
