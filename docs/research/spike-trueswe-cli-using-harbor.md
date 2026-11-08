@@ -1,4 +1,7 @@
-# Spike: Spike: TrueSWE CLI using Harbor
+# Spike: TrueSWE CLI using Harbor
+
+This document records preliminary Harbor research.
+Read the [accepted specification](https://github.com/mmurakaru/trueswe/blob/9c5baac13b59cc793b7ba9be3e37670e11d0ab80/docs/spec.md) for implementation requirements.
 
 ## Question
 
@@ -44,14 +47,19 @@ Test plan: unit-test config parsing and validation; unit-test Harbor command con
 
 ## Recommendation
 
-Build the thin TrueSWE CLI wrapper, but keep it as a pass-through orchestration layer over local `harbor run`. The first version should support `agent`, `model`, exactly one dataset/task source, `outputDir`, optional `nAttempts`, optional `nConcurrent`, optional task include/exclude filters, optional agent kwargs/env, and a summary command that reads Harbor job results. Use Harbor's native task format and result directory as the durable contract.
+Use Harbor as an external task runtime.
+Bend owns TrueSWE commands, experiment flow, and outcome rules.
+TypeScript helpers perform external I/O and validate external or persisted data.
+Use the native Harbor task format and preserve result artifacts alongside TrueSWE experiment records.
+
 
 _Confidence: 82%_
 
-## Open questions
+## Accepted decisions and remaining questions
 
-- Which implementation language should TrueSWE use? The repo has no package structure yet; Python would align naturally with Harbor, while Node may be preferred if the broader system expects it.
-- Which agent should be the default real-agent example: `codex`/Codex CLI or Harbor's `terminus-2`? The spike evidence supports configurability, not a product default beyond oracle for no-cost validation.
+- Bend is the main implementation language, with narrow TypeScript helpers for external I/O.
+- The first live task uses the connected Codex subscription.
+  Codex, Claude Code, and Grok Build are required for the first release.
 - Does Harbor's installed `codex` agent require any additional local Codex configuration beyond `OPENAI_API_KEY` for `openai/gpt-5.6-luna` in this environment?
 - What exact fields appear in current Harbor `result.json` for all failure modes? The summary design should be fixture-hardened once a real Harbor job is generated.
 - Should TrueSWE support published Harbor datasets immediately, or start with local `--path` only and add registry/git sources after the example task is stable?
