@@ -13,5 +13,5 @@ pnpm run setup
 pnpm start --help
 ```
 
-See [local setup](docs/local-services.md) to run a benchmark with Langfuse.
+See the [guide](docs/README.md) for setup and benchmark workflows.
 Use `pnpm run check` to run the development checks.

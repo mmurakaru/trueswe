@@ -1,36 +1,46 @@
 # Human review
 
-Use `pnpm start review examples/review-attempt.json` to request a review suggestion for a recorded terminal attempt.
-The request names a Jev model and uses `TYPESAFE_API_KEY` by default.
-Set `keyEnvironment` to reference a different environment variable.
-The local record preserves the requested model, returned model identity, question, bounded evidence, confidence, and probabilities.
-
 Jev suggests tool failure, wrong path, missing context, task misunderstanding, or no supported category.
-Bend routes confidence below 0.7, unavailable evidence, API errors, and unsupported judgments to manual review.
-Every suggestion remains unconfirmed until a human records a decision.
-Jev does not select agents or change verifier outcomes.
-A nonzero tool result alone is not a confirmed harmful error.
+Bend sends confidence below 0.7, missing evidence, API errors, and unsupported judgments to manual review.
 
-Use `pnpm start reviews examples/codex-smoke.json` to list suggestions and decision histories.
-Inspect the trajectory before recording a label.
-Use `pnpm start label examples/label-attempt.json` only after a human has accepted, changed, or rejected the category.
-The label request needs a recorded evidence reference and an explanation.
-Accepted and changed decisions need a category.
-Rejected decisions create no accepted category.
-Repeated review requests and human decisions preserve their histories separately.
-Concurrent requests use a lock for each attempt's record and finalize their own judgment identifiers.
-A human decision recorded while Jev is running remains in the history.
+> [!NOTE]
+> Suggestions remain unconfirmed until a human records a decision.
+> Jev never selects agents or changes verifier outcomes.
+> A failed tool call alone does not establish a harmful error.
 
-Each attempt's review record lives under `reviews/` inside its experiment directory.
-The Markdown report links that record and shows the current human decision separately from the latest suggestion.
-Langfuse receives separate categorical scores for Jev suggestions and human decisions on the attempt's existing trace.
-A changed or rejected human decision updates the same human score, while the local history retains every decision.
-Local review data remains available if a score export fails.
+## Request and inspect
 
-Evidence includes excerpts of the frozen task, selected project instructions, native trajectory, and explicit agent settings.
-Requests contain at most 32,000 serialized UTF-8 bytes.
-Trajectories above the two-megabyte read limit require local manual inspection.
-Known environment credentials and selected Codex authentication-file tokens are redacted before excerpts are selected.
-Native trajectories remain local and retain their original contents.
+```sh
+pnpm start review examples/review-attempt.json
+pnpm start reviews examples/codex-smoke.json
+```
 
-The integration uses the [TypeSafe JavaScript SDK](https://github.com/typesafe-ai/typesafe-sdk-js) request and response contract at version 0.7.0.
+The request names a Jev model and defaults to `TYPESAFE_API_KEY`.
+Use `keyEnvironment` for another credential reference.
+The local record preserves the request, model identity, evidence, category, confidence, and probabilities.
+Request failures are shown in the command output.
+
+## Record a human decision
+
+Inspect the trajectory, then prepare the [label request](../examples/label-attempt.json).
+It needs an accept, change, or reject decision, a recorded evidence reference, and an explanation.
+Accept and change also require a category.
+
+```sh
+pnpm start label examples/label-attempt.json
+```
+
+Suggestions and human decisions retain separate histories, including concurrent requests.
+Review records live under the experiment's `reviews/` directory and are linked from the report.
+Langfuse receives separate categorical scores on the attempt's trace.
+A changed human decision updates the same human score; local history preserves every decision.
+Score-export failures preserve local review data.
+
+## Evidence bounds
+
+Requests contain at most 32,000 serialized UTF-8 bytes from the frozen task, instructions, native trajectory, and agent settings.
+Trajectories larger than two megabytes require local inspection.
+Known environment credentials and selected authentication-file tokens are removed before excerpt selection.
+Original native trajectories stay local.
+
+The integration uses the [TypeSafe JavaScript SDK](https://github.com/typesafe-ai/typesafe-sdk-js) at version 0.7.0.

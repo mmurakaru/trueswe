@@ -1,45 +1,57 @@
 # Native agents
 
-Each experiment supplies an explicit agent name, model, version, reasoning effort, and authentication reference.
-Select one agent or several distinct agents in the `agents` array.
-Harbor 0.25.0 installs the requested native agent version in the task environment.
-Every agent uses the same independent verifier, frozen inputs, attempt records, and local Langfuse export.
+Set each profile's agent, model, native version, reasoning effort, and authentication reference.
+The `agents` array can select one agent or several distinct agents.
+Harbor 0.25.0 installs the pinned native version in an isolated task container.
+All agents use frozen inputs, an independent verifier, local records, and local Langfuse.
 
 ## Codex
 
-Use `examples/codex-smoke.json` for a subscription profile.
-Its credential reference points to an existing Codex authentication file.
-For an API key, use `authentication: { "method": "api-key", "keyEnvironment": "OPENAI_API_KEY" }`.
+The [Codex example](../examples/codex-smoke.json) uses a subscription through an existing authentication file.
+For API billing, set:
+
+```json
+"authentication": {
+  "method": "api-key",
+  "keyEnvironment": "OPENAI_API_KEY"
+}
+```
 
 ## Claude Code
 
-Use `examples/claude-code-smoke.json` for an API-key profile.
-Put the referenced key in the ignored `.env` file or the process environment.
-For a supported subscription, use `authentication: { "method": "subscription", "tokenEnvironment": "CLAUDE_CODE_OAUTH_TOKEN" }`.
-Obtain the subscription token through `claude setup-token` and store it in the referenced environment variable.
-TrueSWE forwards only the selected credential and forces OAuth for a subscription profile.
-It does not import personal keychain credentials or unrelated provider keys.
+The [Claude example](../examples/claude-code-smoke.json) uses `ANTHROPIC_API_KEY`.
+For a subscription, run this locally:
 
-The task root receives a controlled `CLAUDE.md` that imports the variant's `AGENTS.md`.
-Task-root local Claude instructions, project rules, commands, agent definitions, output styles, settings, and MCP configuration are excluded from the native run.
-Harbor uses an isolated Claude configuration directory inside the attempt environment.
-The selected project skills remain available through the experiment's skill treatment.
+```sh
+claude setup-token
+```
 
-API and subscription tests use a deterministic process fixture when real credentials are unavailable.
-A passing fixture test establishes integration behavior; it does not establish account access to the configured model.
+Put the returned token in `.env` as `CLAUDE_CODE_OAUTH_TOKEN` and set:
 
-Authentication behavior follows the [pinned Harbor Claude adapter](https://github.com/harbor-framework/harbor/blob/v0.25.0/src/harbor/agents/installed/claude_code.py).
+```json
+"authentication": {
+  "method": "subscription",
+  "tokenEnvironment": "CLAUDE_CODE_OAUTH_TOKEN"
+}
+```
+
+TrueSWE forwards the selected credential and forces OAuth for subscription profiles.
+The task receives a controlled `CLAUDE.md` that imports the variant's `AGENTS.md`.
+Personal credentials and unselected project rules, settings, commands, agents, output styles, and MCP configuration are excluded.
+Harbor uses an isolated native configuration directory.
+See the [pinned Claude adapter](https://github.com/harbor-framework/harbor/blob/v0.25.0/src/harbor/agents/installed/claude_code.py).
 
 ## Grok Build
 
-Use `examples/grok-build-smoke.json` with a referenced `XAI_API_KEY`.
-Grok subscription authentication is unsupported in the pinned Harbor adapter and produces an explicit configuration error.
-The profile accepts reasoning effort from `none` through the native adapter's supported levels.
-Harbor disables native automatic updates and telemetry and uses the pinned CLI version.
-TrueSWE bounds background waiting and asks the adapter to terminate leftover processes.
+The [Grok example](../examples/grok-build-smoke.json) uses `XAI_API_KEY`.
+The pinned adapter supports API keys only and rejects subscription profiles.
+TrueSWE bounds background waiting and requests leftover-process cleanup.
+Harbor disables native updates and telemetry.
 
-Grok reads the selected root `AGENTS.md`.
-TrueSWE removes alternate root instruction names and project MCP, plugin, hook, and local configuration files from the staged environment.
-The shared staging step clears project agent metadata on every attempt, including a baseline with no selected skills.
-Native skill discovery uses the selected experiment bundles.
-The [official instruction and skill discovery rules](https://docs.x.ai/build/features/skills-plugins-marketplaces) define these paths.
+Grok receives the selected root `AGENTS.md` and skill bundles.
+Alternate root instructions and project MCP, plugin, hook, and local configuration files are excluded.
+See the [native discovery rules](https://docs.x.ai/build/features/skills-plugins-marketplaces).
+
+> [!NOTE]
+> Fixture tests check integration behavior.
+> A live task with the selected account is required to establish model access.

@@ -2,8 +2,7 @@
 
 TrueSWE measures how project instructions and agent skills affect coding-task completion.
 The first release serves one developer working on their own repositories through a local command-line interface.
-The user reviews evidence and makes improvements.
-TrueSWE runs the comparisons and preserves the evidence needed to assess them.
+The user reviews recorded evidence and decides whether to adopt a change.
 
 ## Release scope
 
@@ -15,33 +14,18 @@ TrueSWE runs the comparisons and preserves the evidence needed to assess them.
 - API keys work for all three agents.
 - Codex and Claude Code also support their available subscription authentication paths.
 - Grok subscription authentication is outside this release because the inspected Harbor adapter requires an API key.
-- The first live test uses the user's existing Codex subscription.
+- The initial live check uses Codex subscription authentication.
 - JSON records and Markdown reports remain available locally.
 - Oxlint checks TypeScript, and automated versioning produces GitHub releases without npm publication.
 
-There is no TrueSWE web application or hosted service in this release.
-Langfuse runs locally, including its own existing web interface.
-Langfuse remote hosting and failover are outside the release.
-TrueSWE does not generate or apply proposed code changes.
-Importing historical coding sessions and benchmarking code-structure changes are outside the release.
-
-## User stories
-
-1. As a developer, I can run an agent on a task and inspect its independently verified outcome.
-2. As a developer, I can freeze real issue-derived tasks so repeated runs measure the same work.
-3. As a developer, I can compare instruction variants with the agent and other inputs held fixed.
-4. As a developer, I can compare skill sets or versions and distinguish supplied skills from observed file loads.
-5. As a developer, I can review Jev's suggested failure categories and confirm evidence-linked labels.
-6. As a developer, I can inspect per-task and per-agent results and decide whether to adopt a candidate.
-7. As a developer, I can resume an interrupted experiment without repeating completed attempts.
-8. As a contributor, I can run the same quality checks as CI and produce a versioned GitHub release.
+> [!NOTE]
+> TrueSWE is a local CLI; Langfuse supplies its local interface.
+> Hosted services, remote failover, historical-session imports, automatic code changes, and code-structure benchmarks are outside scope.
 
 ## Architecture
 
-The Bend command-line program owns command selection and experiment transitions.
-It invokes bounded TypeScript helpers through Bend's process interface.
-Helpers perform external I/O and return validated results to Bend.
-They do not implement a second independent experiment state machine.
+Bend owns command selection, experiment transitions, and policy.
+TypeScript helpers perform bounded external I/O and return validated facts through Bend's process interface.
 
 The TypeScript Harbor helper invokes the installed Harbor command with literal arguments and a configuration file.
 Harbor remains an external Python runtime dependency; TrueSWE application code uses Bend and TypeScript.
@@ -52,12 +36,10 @@ The TypeSafe helper sends bounded evidence excerpts to Jev.
 The Langfuse helper addresses only a configured local instance and records project and object identifiers.
 Selected dependency versions are verified against current official sources before installation and locked for reproducible setup.
 
-## Tasks and bootstrap
+## Task snapshots
 
-The repository initially contains a README and no issues or implementation.
-Build the smallest runnable path before collecting a benchmark dataset.
-Use the remaining TrueSWE implementation issues as task candidates.
-Select at least two development tasks and two reserved evaluation tasks whose required starting state can be reproduced.
+Use reproducible TrueSWE implementation issues as task candidates.
+Collect at least two development tasks and two reserved evaluation tasks.
 
 Each task snapshot contains a stable identifier, source issue URL and text, repository URL, exact starting commit, environment definition, success checks, and content hashes.
 A task may have a different starting commit from another task.
@@ -159,8 +141,8 @@ The release must produce correct comparisons even when the candidate does not im
 
 ## Quality and releases
 
-Use oxlint and Changesets for the repository's quality checks and release workflow.
-Use strict TypeScript checks, oxlint, formatting, meaningful tests, and Bend validation in local commands and CI.
+Run strict TypeScript checks, oxlint, formatting, meaningful tests, and Bend validation locally and in CI.
+Use Changesets for versioning.
 Verify versions of dependencies and GitHub Actions against their official registries or upstream releases before pinning.
 Keep package manifests private and provide no npm publish command or workflow.
 
@@ -174,7 +156,7 @@ Never describe a source bundle as a standalone binary.
 Each implementation issue follows the ship workflow through tests, independent code review, comment trimming, a review-ready PR, and CI.
 Commits use the user's configured identity without attribution trailers.
 PRs use the repository's template.
-Creating a release workflow does not authorize merging feature PRs or publishing a release during implementation.
+Publishing a release requires completed acceptance checks.
 
 ## Release acceptance
 
@@ -202,4 +184,4 @@ Creating a release workflow does not authorize merging feature PRs or publishing
 - [Langfuse skill tracing](https://langfuse.com/docs/skill-management/tracing)
 - [Langfuse self-hosting](https://langfuse.com/self-hosting/deployment/docker-compose)
 
-The upstream sources were checked on 2026-11-08.
+Sources checked on 2026-11-08.
