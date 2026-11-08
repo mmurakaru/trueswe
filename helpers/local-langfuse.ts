@@ -52,25 +52,29 @@ export async function recordLangfuseAttempt(
   const provider = new TracerProvider({ spanProcessors: [processor] });
   setLangfuseTracerProvider(provider);
   try {
-    const observation = startObservation(`trueswe/${attempt.identifier}`, {
-      input: {
-        task: attempt.taskIdentifier,
-        agent: attempt.agentName,
-        variant: attempt.variantName,
-        repetition: attempt.repetition,
+    const observation = startObservation(
+      `trueswe/${attempt.identifier}`,
+      {
+        input: {
+          task: attempt.taskIdentifier,
+          agent: attempt.agentName,
+          variant: attempt.variantName,
+          repetition: attempt.repetition,
+        },
+        output: { outcome: attempt.outcome, state: attempt.state },
+        metadata: {
+          experiment: configuration.name,
+          trajectoryPath: attempt.trajectoryPath,
+          durationSeconds: attempt.durationSeconds,
+          inputTokens: attempt.inputTokens,
+          outputTokens: attempt.outputTokens,
+          costDollars: attempt.costDollars,
+        },
       },
-      output: { outcome: attempt.outcome, state: attempt.state },
-      metadata: {
-        experiment: configuration.name,
-        trajectoryPath: attempt.trajectoryPath,
-        durationSeconds: attempt.durationSeconds,
-        inputTokens: attempt.inputTokens,
-        outputTokens: attempt.outputTokens,
-        costDollars: attempt.costDollars,
-      },
-    });
+      { startTime: attempt.startedAt ? new Date(attempt.startedAt) : new Date() },
+    );
     const traceIdentifier = observation.traceId;
-    observation.end();
+    observation.end(attempt.finishedAt ? new Date(attempt.finishedAt) : undefined);
     await provider.forceFlush();
     return traceIdentifier;
   } finally {

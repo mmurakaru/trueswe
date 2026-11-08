@@ -1,5 +1,5 @@
-import { access } from "node:fs/promises";
-import { resolve } from "node:path";
+import { mkdir } from "node:fs/promises";
+import { resolve, dirname } from "node:path";
 import {
   readExperimentConfiguration,
   hashExperimentContent,
@@ -11,16 +11,22 @@ import type { ExperimentRecord, AttemptRecord } from "./experiment-record.ts";
 import { checkLocalLangfuse, recordLangfuseAttempt } from "./local-langfuse.ts";
 import { executeHarborAttempt } from "./harbor-attempt.ts";
 import { writeExperimentReport } from "./experiment-report.ts";
+import { freezeExperimentInputs, verifyFrozenExperimentInputs } from "./experiment-freeze.ts";
 
 export async function prepareExperiment(configurationPath: string): Promise<number> {
   const configuration = await readExperimentConfiguration(configurationPath);
   await checkLocalLangfuse(configuration);
   const recordPath = experimentRecordPath(configuration);
-  const exists = await access(recordPath).then(
-    () => true,
-    () => false,
-  );
-  if (exists) throw new Error("Experiment output already exists; choose a new output directory");
+  const outputDirectory = resolve(configuration.outputDirectory);
+  await mkdir(dirname(outputDirectory), { recursive: true });
+  try {
+    await mkdir(outputDirectory, { mode: 0o700 });
+  } catch {
+    throw new Error(
+      "Experiment output already exists or cannot be created; choose a new output directory",
+    );
+  }
+  const frozenInputs = await freezeExperimentInputs(configuration);
   const attempts: AttemptRecord[] = [];
   for (const task of configuration.tasks)
     for (const profile of configuration.agents)
@@ -48,11 +54,13 @@ export async function prepareExperiment(configurationPath: string): Promise<numb
         }
   if (attempts.length > 10_000) throw new Error("Experiment exceeds the 10000 attempt limit");
   const record: ExperimentRecord = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     configurationHash: hashExperimentContent(JSON.stringify(configuration)),
     configuration,
     createdAt: new Date().toISOString(),
     attempts,
+    frozenInputs,
+    inputHash: hashExperimentContent(JSON.stringify(frozenInputs)),
   };
   await writeExperimentRecord(recordPath, record);
   await writeExperimentReport(record);
@@ -70,6 +78,7 @@ export async function executeExperimentOrdinal(
   const record = await readExperimentRecord(experimentRecordPath(configuration));
   if (record.configurationHash !== hashExperimentContent(JSON.stringify(configuration)))
     throw new Error("Frozen experiment configuration changed");
+  await verifyFrozenExperimentInputs(record);
   const attempt = record.attempts[ordinal];
   if (!attempt || attempt.state !== "pending")
     throw new Error("Attempt is absent or already started");

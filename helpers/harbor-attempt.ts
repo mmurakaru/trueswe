@@ -2,6 +2,7 @@ import { readFile, writeFile, mkdir, cp, readdir } from "node:fs/promises";
 import { resolve, join, dirname } from "node:path";
 import { existsSync } from "node:fs";
 import { verifyTaskSnapshot } from "./task-snapshot.ts";
+import { frozenTaskDirectory, frozenInstructionPath } from "./experiment-freeze.ts";
 import * as validation from "valibot";
 import { runExternalProcess } from "./child-process-io.ts";
 import { requireEnvironmentVariable } from "./local-langfuse.ts";
@@ -118,8 +119,11 @@ export async function executeHarborAttempt(
       throw new Error("Task snapshot identity or split does not match the experiment");
     await cp(join(snapshotDirectory, "snapshot.json"), join(attemptDirectory, "snapshot.json"));
   }
-  await cp(resolve(task.path), taskPath, { recursive: true, verbatimSymlinks: true });
-  await cp(resolve(variant.instructionsPath), join(taskPath, "environment", "AGENTS.md"));
+  await cp(frozenTaskDirectory(configuration, task.identifier), taskPath, { recursive: true });
+  await cp(
+    frozenInstructionPath(configuration, variant.name),
+    join(taskPath, "environment", "AGENTS.md"),
+  );
   const dockerfilePath = join(taskPath, "environment", "Dockerfile");
   await writeFile(
     dockerfilePath,
@@ -159,7 +163,7 @@ export async function executeHarborAttempt(
       process.env.TRUESWE_HARBOR ?? resolve(".tools/harbor-venv/bin/harbor"),
       ["run", "--config", configurationPath],
       harborProcessEnvironment(record, attempt),
-      (configuration.limits.attemptTimeoutSeconds * 3 + 60) * 1000,
+      configuration.limits.attemptTimeoutSeconds * 1000,
     );
     await writeFile(
       join(attemptDirectory, "harbor.log"),

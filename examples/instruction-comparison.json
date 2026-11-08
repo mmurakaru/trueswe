@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "name": "instruction-comparison",
+  "outputDirectory": "results/instruction-comparison",
+  "tasks": [{ "identifier": "addition", "path": "tasks/smoke", "split": "development" }],
+  "agents": [
+    {
+      "name": "codex",
+      "model": "openai/gpt-6.1-sol",
+      "version": "0.167.0",
+      "reasoningEffort": "medium",
+      "authentication": {
+        "method": "subscription",
+        "credentialPathEnvironment": "TRUESWE_CODEX_AUTH_FILE"
+      }
+    }
+  ],
+  "variants": [
+    { "name": "baseline", "instructionsPath": "examples/baseline-instructions.md" },
+    { "name": "candidate", "instructionsPath": "examples/candidate-instructions.md" }
+  ],
+  "limits": { "attemptTimeoutSeconds": 300, "concurrency": 1 },
+  "langfuse": { "baseUrl": "http://127.0.0.1:3035", "projectIdentifier": "trueswe" }
+}
