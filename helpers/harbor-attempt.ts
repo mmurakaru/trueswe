@@ -148,7 +148,7 @@ export async function executeHarborAttempt(
     await writeFile(
       dockerfilePath,
       (await readFile(dockerfilePath, "utf8")) +
-        "\nRUN rm -f /app/CLAUDE.local.md /app/.claude/settings.json /app/.claude/settings.local.json /app/.mcp.json\nCOPY CLAUDE.md /app/CLAUDE.md\n",
+        "\nRUN rm -f /app/CLAUDE.local.md /app/.claude/CLAUDE.md /app/.claude/settings.json /app/.claude/settings.local.json /app/.mcp.json && rm -rf /app/.claude/rules /app/.claude/commands /app/.claude/agents /app/.claude/output-styles\nCOPY CLAUDE.md /app/CLAUDE.md\n",
     );
   }
   await stageAttemptSkills(record, attempt, taskPath);

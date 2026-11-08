@@ -21,7 +21,7 @@ TrueSWE forwards only the selected credential and forces OAuth for a subscriptio
 It does not import personal keychain credentials or unrelated provider keys.
 
 The task root receives a controlled `CLAUDE.md` that imports the variant's `AGENTS.md`.
-Task-root local Claude instructions, project settings, local settings, and MCP configuration are excluded from the native run.
+Task-root local Claude instructions, project rules, commands, agent definitions, output styles, settings, and MCP configuration are excluded from the native run.
 Harbor uses an isolated Claude configuration directory inside the attempt environment.
 The selected project skills remain available through the experiment's skill treatment.
 
