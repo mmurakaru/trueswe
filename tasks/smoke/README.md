@@ -6,4 +6,4 @@ An independent verifier container checks JavaScript syntax and known arithmetic 
 Only the module is transferred to the verifier.
 
 Run the reference solution with `harbor run -p tasks/smoke -a oracle`.
-Run the Codex example with `npm start -- run examples/codex-smoke.json` after configuring local Langfuse and the authentication-file reference.
+Run the Codex example with `pnpm start run examples/codex-smoke.json` after configuring local Langfuse and the authentication-file reference.

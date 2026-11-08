@@ -3,7 +3,7 @@
 Use [docs/spec.md](docs/spec.md) for accepted product requirements.
 Bend owns commands and experiment rules.
 TypeScript helpers own external I/O and validate persisted or external data.
-Run `npm run check` before committing.
+Run `pnpm run check` before committing.
 Use a Changeset for each contribution; generated versions and changelogs belong to the version workflow.
 Keep package manifests private and release through GitHub.
 

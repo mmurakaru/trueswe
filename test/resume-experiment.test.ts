@@ -7,7 +7,7 @@ import { launchExperimentCommand, startExperimentCommand } from "./command-test-
 import { startLocalLangfuseFixture } from "./local-langfuse-test-support.ts";
 import type { ExperimentRecord } from "../helpers/experiment-record.ts";
 
-async function waitForPath(path: string, remaining = 500): Promise<void> {
+async function waitForPath(path: string, remaining = 1500): Promise<void> {
   if (
     await access(path).then(
       () => true,

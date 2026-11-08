@@ -16,7 +16,7 @@ const version = spawnSync(compiler, ["version"], {
   env: { ...process.env, BEND_NO_TELEMETRY: "1" },
 });
 if (version.status !== 0) {
-  console.error("Bend version could not be resolved. Run npm run setup.");
+  console.error("Bend version could not be resolved. Run pnpm run setup.");
   process.exit(1);
 }
 const sourceHash = await fingerprintDirectory(`${projectRoot}src`);
@@ -31,7 +31,7 @@ if (argumentsList.includes("--check-only")) {
     env: { ...process.env, BEND_NO_TELEMETRY: "1" },
   });
   if (check.error)
-    console.error(`Bend compiler launch failed: ${check.error.message}. Run npm run setup.`);
+    console.error(`Bend compiler launch failed: ${check.error.message}. Run pnpm run setup.`);
   process.exit(check.status ?? 1);
 }
 await withFileRecordLock(executablePath, async () => {
@@ -44,7 +44,7 @@ await withFileRecordLock(executablePath, async () => {
     });
     if (compilation.error)
       throw new Error(
-        `Bend compiler launch failed: ${compilation.error.message}. Run npm run setup.`,
+        `Bend compiler launch failed: ${compilation.error.message}. Run pnpm run setup.`,
       );
     if (compilation.status !== 0) throw new Error("Bend compilation failed");
     if ((await fingerprintDirectory(`${projectRoot}src`)) !== sourceHash)

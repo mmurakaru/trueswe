@@ -5,13 +5,13 @@ Compare project instructions and skills using verified outcomes and recorded run
 
 ## Get started
 
-Requires Node 24.12 or later in the Node 24 series, clang, and macOS or Linux.
+Requires Node 26 LTS, pnpm 12, clang, and macOS or Linux.
 
 ```sh
-npm ci
-npm run setup
-npm start -- --help
+pnpm install --frozen-lockfile
+pnpm run setup
+pnpm start --help
 ```
 
 See [local setup](docs/local-services.md) to run a benchmark with Langfuse.
-Use `npm run check` to run the development checks.
+Use `pnpm run check` to run the development checks.

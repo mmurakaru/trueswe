@@ -19,12 +19,12 @@ jobs:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-node@v7.1.0
         with:
-          node-version: "24.18.1"
-          cache: npm
-      - run: npm ci
-      - run: npm run setup
-      - run: npm run check
-      - run: npm run build
+          node-version-file: .node-version
+      - uses: pnpm/action-setup@9bbca1e9dc2902adb87e8780fe5c98796985a62d
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run setup
+      - run: pnpm run check
+      - run: pnpm run build
       - name: Check release archive
         run: |
           cd dist
@@ -45,6 +45,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v7.1.0
         with:
-          node-version: "24.18.1"
-      - run: npm ci
-      - run: npm exec changeset status -- --since=origin/${{ github.base_ref }}
+          node-version-file: .node-version
+      - uses: pnpm/action-setup@9bbca1e9dc2902adb87e8780fe5c98796985a62d
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec changeset status --since=origin/${{ github.base_ref }}

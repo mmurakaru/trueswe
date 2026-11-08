@@ -27,5 +27,5 @@ test("Bend CLI explains how to install a missing compiler", () => {
     env: { ...process.env, TRUESWE_BEND: "/missing/trueswe-bend-compiler" },
   });
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /Run npm run setup/);
+  assert.match(result.stderr, /Run pnpm run setup/);
 });

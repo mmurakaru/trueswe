@@ -1,6 +1,8 @@
 # Releases
 
 Contributions include a Changeset.
+The source archive requires the Node LTS version in `.node-version` and the pnpm version in `package.json`.
+Run `pnpm install --frozen-lockfile` and `pnpm run setup` after extraction.
 The version workflow opens a draft version pull request and the artifact workflow publishes a GitHub source archive after that version update is merged.
 Package manifests are private and the workflow does not publish to npm.
 

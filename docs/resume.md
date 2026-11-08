@@ -1,6 +1,6 @@
 # Resume an experiment
 
-Run `npm start -- resume CONFIG` to continue the matching frozen experiment.
+Run `pnpm start resume CONFIG` to continue the matching frozen experiment.
 Completed passes and task failures remain unchanged.
 Pending attempts run once.
 Running attempts first recover any complete independent verifier result from disk.
@@ -16,7 +16,7 @@ Recovery removes containers selected by the execution's Compose working director
 It preserves available agent logs before removing containers.
 Cleanup warnings remain visible in the report.
 
-Run `npm start -- recover CONFIG` to recover local results without starting another model attempt.
+Run `pnpm start recover CONFIG` to recover local results without starting another model attempt.
 A completed experiment can be resumed repeatedly without rewriting results or exporting duplicate traces.
 Previous executions and human reviews remain recorded separately.
 A resumed logical attempt retains its Langfuse trace identity.
