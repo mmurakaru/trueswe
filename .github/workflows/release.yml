@@ -1,0 +1,64 @@
+name: Release
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: release
+  cancel-in-progress: false
+jobs:
+  version:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: "24.18.1"
+      - run: npm ci
+      - uses: changesets/action@v2.1.2
+        with:
+          version-script: npm run version:prepare
+          pr-title: "Release: version TrueSWE"
+          commit-message: "Release: version TrueSWE"
+          github-token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+  artifact:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: "24.18.1"
+      - run: npm ci
+      - run: npm run setup
+      - run: npm run check
+      - run: npm run build
+      - name: Publish a versioned GitHub source release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          version=$(node -p "require('./package.json').version")
+          tag="v${version}"
+          if find .changeset -maxdepth 1 -name '*.md' | grep -q .; then
+            echo 'Pending changesets; waiting for the version PR.'
+            exit 0
+          fi
+          cd dist
+          sha256sum -c checksums.txt
+          if gh release view "$tag" --json isDraft -q .isDraft > release-state.txt 2>/dev/null; then
+            if grep -q false release-state.txt; then exit 0; fi
+            gh release upload "$tag" trueswe-*.tar.gz checksums.txt --clobber
+          else
+            gh release create "$tag" --target "$GITHUB_SHA" --title "TrueSWE $tag" --generate-notes --draft trueswe-*.tar.gz checksums.txt
+          fi
+          gh release edit "$tag" --draft=false
