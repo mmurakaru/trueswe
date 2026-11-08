@@ -87,7 +87,7 @@ test("Jev suggestions and explicit human labels preserve verified outcomes and r
             {
               step_id: 1,
               source: "agent",
-              message: "Recorded context ".repeat(3000) + fileToken + " " + routerToken,
+              message: "é".repeat(16_000) + "a" + fileToken + " " + routerToken,
               tool_calls: [
                 { tool_call_id: "tool-1", function_name: "exec", arguments: { input: "false" } },
               ],
@@ -141,6 +141,7 @@ test("Jev suggestions and explicit human labels preserve verified outcomes and r
     assert.ok(!received[0]!.includes(fileToken));
     assert.ok(!received[0]!.includes(routerToken));
     assert.match(received[0]!, /REDACTED/);
+    assert.ok(!received[0]!.includes("\uFFFD"));
     assert.ok(!JSON.stringify(review).includes(fileToken));
     assert.ok(!JSON.stringify(review).includes(routerToken));
     assert.equal(original.attempts[0]?.outcome, "pass");

@@ -96,7 +96,11 @@ export async function readReviewEvidence(
       trajectory = "Trajectory evidence could not be read; inspect it locally";
     }
   }
-  const tail = Buffer.from(trajectory).subarray(-10_000).toString("utf8");
+  const trajectoryBytes = Buffer.from(trajectory);
+  let tailStart = Math.max(0, trajectoryBytes.length - 10_000);
+  while (tailStart < trajectoryBytes.length && (trajectoryBytes[tailStart]! & 0xc0) === 0x80)
+    tailStart += 1;
+  const tail = trajectoryBytes.subarray(tailStart).toString("utf8");
   return {
     state: {
       attempt: {
