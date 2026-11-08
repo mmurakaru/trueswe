@@ -1,6 +1,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, writeFile, mkdir, cp, rm, chmod, access } from "node:fs/promises";
+import {
+  mkdtemp,
+  readFile,
+  writeFile,
+  mkdir,
+  cp,
+  rm,
+  chmod,
+  access,
+  symlink,
+  readlink,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
@@ -14,7 +25,8 @@ test("snapshot CLI freezes committed source and issue evidence, then detects cha
     await mkdir(repository);
     execFileSync("git", ["init", "--quiet", repository]);
     await writeFile(join(repository, "content.txt"), "committed source");
-    execFileSync("git", ["-C", repository, "add", "content.txt"]);
+    await symlink("content.txt", join(repository, "content-link.txt"));
+    execFileSync("git", ["-C", repository, "add", "content.txt", "content-link.txt"]);
     execFileSync("git", [
       "-C",
       repository,
@@ -43,7 +55,7 @@ test("snapshot CLI freezes committed source and issue evidence, then detects cha
     };
     await writeFile(
       github,
-      `#!/usr/bin/env node\nconsole.log(${JSON.stringify(JSON.stringify(issue))});\n`,
+      `#!/usr/bin/env node\nconsole.log(process.argv[2] === "api" ? ${JSON.stringify(commit)} : ${JSON.stringify(JSON.stringify(issue))});\n`,
     );
     await chmod(github, 0o700);
     const template = join(temporaryDirectory, "template");
@@ -78,6 +90,42 @@ test("snapshot CLI freezes committed source and issue evidence, then detects cha
     );
     assert.equal(snapshot.startingCommit, commit);
     assert.equal(snapshot.split, "reserved");
+    assert.equal(
+      await readlink(join(output, "task/environment/repository/content-link.txt")),
+      "content.txt",
+    );
+    const metadataPath = join(output, "snapshot.json");
+    await writeFile(metadataPath, JSON.stringify({ ...snapshot, split: "development" }));
+    const changedMetadata = await launchExperimentCommand(["verify-snapshot", output], environment);
+    assert.notEqual(changedMetadata.status, 0);
+    assert.match(changedMetadata.output, /Frozen task metadata changed/);
+    await writeFile(metadataPath, JSON.stringify(snapshot));
+    const repositoryLink = join(output, "task/environment/repository/content-link.txt");
+    await rm(repositoryLink);
+    await symlink("different.txt", repositoryLink);
+    const changedLink = await launchExperimentCommand(["verify-snapshot", output], environment);
+    assert.notEqual(changedLink.status, 0);
+    assert.match(changedLink.output, /Frozen task content changed/);
+    await rm(repositoryLink);
+    await symlink("content.txt", repositoryLink);
+    const githubSource = await readFile(github, "utf8");
+    await writeFile(
+      github,
+      githubSource.replace(JSON.stringify(commit), JSON.stringify("f".repeat(40))),
+    );
+    await writeFile(
+      requestPath,
+      JSON.stringify({
+        ...request,
+        outputDirectory: join(temporaryDirectory, "unverified-commit"),
+      }),
+    );
+    const unverified = await launchExperimentCommand(["snapshot", requestPath], environment);
+    assert.notEqual(unverified.status, 0);
+    assert.match(unverified.output, /not verified in the requested GitHub repository/);
+    await writeFile(github, githubSource);
+    await writeFile(requestPath, JSON.stringify(request));
+
     assert.equal(snapshot.sourceIssue.body, issue.body);
     assert.equal(
       await readFile(join(output, "task/environment/repository/content.txt"), "utf8"),

@@ -118,7 +118,7 @@ export async function executeHarborAttempt(
       throw new Error("Task snapshot identity or split does not match the experiment");
     await cp(join(snapshotDirectory, "snapshot.json"), join(attemptDirectory, "snapshot.json"));
   }
-  await cp(resolve(task.path), taskPath, { recursive: true });
+  await cp(resolve(task.path), taskPath, { recursive: true, verbatimSymlinks: true });
   await cp(resolve(variant.instructionsPath), join(taskPath, "environment", "AGENTS.md"));
   const dockerfilePath = join(taskPath, "environment", "Dockerfile");
   await writeFile(

@@ -57,6 +57,7 @@ export interface TaskSnapshot {
   verifierContentHash: string;
   previousEvaluationExposure: string;
   createdAt: string;
+  metadataHash: string;
 }
 
 const taskSnapshotSchema = validation.object({
@@ -73,12 +74,15 @@ const taskSnapshotSchema = validation.object({
   verifierContentHash: validation.string(),
   previousEvaluationExposure: validation.string(),
   createdAt: validation.string(),
+  metadataHash: validation.string(),
 });
 
 async function checkedSnapshotProcess(program: string, argumentsList: string[]): Promise<string> {
   const result = await runExternalProcess(program, argumentsList, process.env, 60_000);
   if (result.status !== 0)
-    throw new Error(`Task snapshot command failed: ${program}: ${result.errors}`);
+    throw new Error(
+      `Task snapshot command failed: ${program}: ${result.timedOut ? "timed out" : result.errors || `exited with status ${result.status}`}`,
+    );
   return result.output;
 }
 
@@ -115,6 +119,16 @@ export async function createTaskSnapshot(requestPath: string): Promise<TaskSnaps
       ]),
     ),
   );
+  const remoteCommit = (
+    await checkedSnapshotProcess(process.env.TRUESWE_GITHUB ?? "gh", [
+      "api",
+      `repos/${request.repositoryUrl.slice("https://github.com/".length)}/commits/${request.startingCommit}`,
+      "--jq",
+      ".sha",
+    ])
+  ).trim();
+  if (remoteCommit !== request.startingCommit)
+    throw new Error("Starting commit is not verified in the requested GitHub repository");
   const sourceIssue = validation.parse(
     sourceIssueSchema,
     JSON.parse(
@@ -136,7 +150,10 @@ export async function createTaskSnapshot(requestPath: string): Promise<TaskSnaps
   const staging = await mkdtemp(join(dirname(output), ".trueswe-snapshot-"));
   try {
     const taskPath = join(staging, "task");
-    await cp(resolve(request.taskTemplateDirectory), taskPath, { recursive: true });
+    await cp(resolve(request.taskTemplateDirectory), taskPath, {
+      recursive: true,
+      verbatimSymlinks: true,
+    });
     validation.parse(
       verifierConfigurationSchema,
       parseToml(await readFile(join(taskPath, "task.toml"), "utf8")),
@@ -161,8 +178,8 @@ export async function createTaskSnapshot(requestPath: string): Promise<TaskSnaps
       join(taskPath, "instruction.md"),
       `# ${sourceIssue.title}\n\n${sourceIssue.body}\n\n## Source discussion\n\n${sourceIssue.comments.map((comment) => comment.body).join("\n\n")}\n`,
     );
-    const snapshot: TaskSnapshot = {
-      schemaVersion: 1,
+    const metadata = {
+      schemaVersion: 1 as const,
       identifier: request.identifier,
       split: request.split,
       repositoryUrl: request.repositoryUrl,
@@ -175,6 +192,10 @@ export async function createTaskSnapshot(requestPath: string): Promise<TaskSnaps
       verifierContentHash: await fingerprintDirectory(join(taskPath, "tests")),
       previousEvaluationExposure: request.previousEvaluationExposure,
       createdAt: new Date().toISOString(),
+    };
+    const snapshot: TaskSnapshot = {
+      ...metadata,
+      metadataHash: hashExperimentContent(JSON.stringify(metadata)),
     };
     await writeFile(join(staging, "snapshot.json"), JSON.stringify(snapshot, null, 2) + "\n", {
       mode: 0o600,
@@ -191,6 +212,9 @@ export async function verifyTaskSnapshot(directory: string): Promise<TaskSnapsho
     taskSnapshotSchema,
     JSON.parse(await readFile(join(directory, "snapshot.json"), "utf8")),
   );
+  const { metadataHash, ...metadata } = snapshot;
+  if (metadataHash !== hashExperimentContent(JSON.stringify(metadata)))
+    throw new Error("Frozen task metadata changed");
   const actual = await fingerprintDirectory(join(directory, "task"));
   if (actual !== snapshot.taskContentHash)
     throw new Error(`Frozen task content changed: ${snapshot.identifier}`);
