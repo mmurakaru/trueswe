@@ -19,7 +19,8 @@
     "services:configure": "node scripts/configure-local-services.ts",
     "services:up": "docker compose up -d --wait --wait-timeout 180",
     "services:down": "docker compose down",
-    "setup:harbor": "node scripts/install-harbor.ts"
+    "setup:harbor": "node scripts/install-harbor.ts",
+    "setup:env": "node scripts/configure-local-services.ts"
   },
   "dependencies": {
     "@langfuse/client": "6.1.1",

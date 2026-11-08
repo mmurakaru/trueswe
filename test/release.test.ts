@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { parseEnv } from "node:util";
 import { createHash } from "node:crypto";
 
 test("GitHub source artifact contains an executable versioned Bend application", async () => {
@@ -41,6 +42,16 @@ test("GitHub source artifact contains an executable versioned Bend application",
       encoding: "utf8",
     });
     assert.equal(dependencies.status, 0, dependencies.stderr);
+    const template = parseEnv(await readFile(join(extractedRoot, ".env.example"), "utf8"));
+    assert.ok(Object.keys(template).includes("CLAUDE_CODE_OAUTH_TOKEN"));
+    assert.ok(Object.values(template).every((value) => value === ""));
+    assert.match(await readFile(join(extractedRoot, ".gitignore"), "utf8"), /^\.env$/m);
+    const setup = spawnSync("npm", ["run", "setup:env"], { cwd: extractedRoot, encoding: "utf8" });
+    assert.equal(setup.status, 0, setup.stderr);
+    assert.equal(
+      parseEnv(await readFile(join(extractedRoot, ".env"), "utf8")).CLAUDE_CODE_OAUTH_TOKEN,
+      "",
+    );
     const execution = spawnSync(process.execPath, ["scripts/run-bend.ts", "--version"], {
       cwd: extractedRoot,
       encoding: "utf8",
