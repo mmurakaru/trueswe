@@ -4,7 +4,10 @@ import * as validation from "valibot";
 import { runExternalProcess } from "./child-process-io.ts";
 import { requireEnvironmentVariable } from "./local-langfuse.ts";
 import { writeExperimentRecord, experimentRecordPath } from "./experiment-record.ts";
-import { redactRuntimeSecrets } from "./secret-redaction.ts";
+import {
+  redactRuntimeSecrets,
+  registerCredentialEnvironmentReference,
+} from "./secret-redaction.ts";
 import type { ExperimentRecord, AttemptRecord } from "./experiment-record.ts";
 
 const harborResultSchema = validation.object({
@@ -101,6 +104,8 @@ export async function executeHarborAttempt(
   const variant = configuration.variants.find((item) => item.name === attempt.variantName);
   if (!task || !profile || !variant)
     throw new Error("Attempt references an unknown experiment input");
+  if (profile.authentication.method === "api-key")
+    registerCredentialEnvironmentReference(profile.authentication.keyEnvironment);
   const attemptDirectory = resolve(configuration.outputDirectory, "attempts", attempt.identifier);
   await mkdir(attemptDirectory, { recursive: true });
   const taskPath = join(attemptDirectory, "task");
@@ -146,7 +151,9 @@ export async function executeHarborAttempt(
       join(attemptDirectory, "harbor.log"),
       redactRuntimeSecrets(result.output + "\n" + result.errors),
     );
-    const resultDirectory = await findHarborResult(join(attemptDirectory, "job"));
+    const resultDirectory = result.timedOut
+      ? null
+      : await findHarborResult(join(attemptDirectory, "job"));
     if (result.timedOut) {
       evidenceCode = 3;
       attempt.error = "Harbor attempt exceeded its process deadline";

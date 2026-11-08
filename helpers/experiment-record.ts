@@ -2,6 +2,7 @@ import * as validation from "valibot";
 import { createHash } from "node:crypto";
 import { readFile, writeFile, rename, mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import { registerCredentialEnvironmentReference } from "./secret-redaction.ts";
 
 const positiveInteger = validation.pipe(
   validation.number(),
@@ -104,7 +105,14 @@ export function hashExperimentContent(content: string | Buffer): string {
 }
 
 export async function readExperimentConfiguration(path: string): Promise<ExperimentConfiguration> {
-  return validation.parse(experimentConfigurationSchema, JSON.parse(await readFile(path, "utf8")));
+  const configuration = validation.parse(
+    experimentConfigurationSchema,
+    JSON.parse(await readFile(path, "utf8")),
+  );
+  for (const profile of configuration.agents)
+    if (profile.authentication.method === "api-key")
+      registerCredentialEnvironmentReference(profile.authentication.keyEnvironment);
+  return configuration;
 }
 
 export function experimentRecordPath(configuration: ExperimentConfiguration): string {

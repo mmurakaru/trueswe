@@ -57,6 +57,7 @@ test("CLI preserves independently verified outcomes and distinguishes execution 
           ["passing", 1, null, "completed", "pass"],
           ["failing", 0, null, "completed", "fail"],
           ["broken", 1, { exception_type: "AgentAuthenticationError" }, "execution-error", null],
+          ["interrupted", 0, null, "interrupted", null],
         ] as const
       ).map(async ([name, reward, exception, expectedState, expectedOutcome]) => {
         const helper = join(temporaryDirectory, `harbor-${name}`);
@@ -66,6 +67,7 @@ test("CLI preserves independently verified outcomes and distinguishes execution 
           helper + ".result.json",
           JSON.stringify({
             exception_info: exception,
+            interruptParent: name === "interrupted",
             verifier_environment_mode: exception ? null : "separate",
             verifier_result: { rewards: { accuracy: reward } },
             agent_result: { n_input_tokens: null, n_output_tokens: null, cost_usd: null },
@@ -73,6 +75,11 @@ test("CLI preserves independently verified outcomes and distinguishes execution 
         );
         const configuration = JSON.parse(await readFile("examples/codex-smoke.json", "utf8"));
         configuration.name = name;
+        if (name === "failing")
+          configuration.agents[0].authentication = {
+            method: "api-key",
+            keyEnvironment: "CUSTOM_AUTH",
+          };
         configuration.outputDirectory = join(temporaryDirectory, name);
         configuration.langfuse.baseUrl = `http://127.0.0.1:${address.port}`;
         const configurationPath = join(temporaryDirectory, `${name}.json`);
@@ -82,6 +89,7 @@ test("CLI preserves independently verified outcomes and distinguishes execution 
           TRUESWE_HARBOR: helper,
           LANGFUSE_PUBLIC_KEY: "pk-lf-test",
           LANGFUSE_SECRET_KEY: "sk-lf-test",
+          CUSTOM_AUTH: "synthetic-credential-value",
           TRUESWE_CODEX_AUTH_FILE: resolvePath(temporaryDirectory, "unused-auth.json"),
         });
         assert.equal(execution.status, 0, execution.output);
@@ -92,6 +100,19 @@ test("CLI preserves independently verified outcomes and distinguishes execution 
         assert.equal(record.attempts[0]?.outcome, expectedOutcome);
         assert.equal(record.attempts[0]?.costDollars, null);
         assert.ok(record.attempts[0]?.traceIdentifier);
+        if (name === "failing")
+          assert.doesNotMatch(
+            await readFile(
+              join(
+                configuration.outputDirectory,
+                "attempts",
+                "addition-codex-baseline-1",
+                "harbor.log",
+              ),
+              "utf8",
+            ),
+            /synthetic-credential-value/,
+          );
         assert.match(
           await readFile(join(configuration.outputDirectory, "report.md"), "utf8"),
           /Cost: unknown/,
@@ -99,7 +120,7 @@ test("CLI preserves independently verified outcomes and distinguishes execution 
       }),
     );
     for (const outcome of outcomes) if (outcome.status === "rejected") throw outcome.reason;
-    assert.equal(traceRequests, 3);
+    assert.equal(traceRequests, 4);
   } finally {
     await new Promise<void>((resolve, reject) =>
       server.close((error) => (error ? reject(error) : resolve())),
