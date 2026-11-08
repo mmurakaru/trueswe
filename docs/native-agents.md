@@ -29,3 +29,16 @@ API and subscription tests use a deterministic process fixture when real credent
 A passing fixture test establishes integration behavior; it does not establish account access to the configured model.
 
 Authentication behavior follows the [pinned Harbor Claude adapter](https://github.com/harbor-framework/harbor/blob/v0.25.0/src/harbor/agents/installed/claude_code.py).
+
+## Grok Build
+
+Use `examples/grok-build-smoke.json` with a referenced `XAI_API_KEY`.
+Grok subscription authentication is unsupported in the pinned Harbor adapter and produces an explicit configuration error.
+The profile accepts reasoning effort from `none` through the native adapter's supported levels.
+Harbor disables native automatic updates and telemetry and uses the pinned CLI version.
+TrueSWE bounds background waiting and asks the adapter to terminate leftover processes.
+
+Grok reads the selected root `AGENTS.md`.
+TrueSWE removes alternate root instruction names and project MCP, plugin, hook, and local configuration files from the staged environment.
+Native skill discovery uses the selected experiment bundles.
+The [official instruction and skill discovery rules](https://docs.x.ai/build/features/skills-plugins-marketplaces) define these paths.

@@ -58,6 +58,27 @@ const nativeAgentProfileSchema = validation.variant("name", [
       }),
     ]),
   }),
+  validation.strictObject({
+    name: validation.literal("grok-build"),
+    model: agentModelSchema,
+    version: pinnedAgentVersionSchema,
+    reasoningEffort: validation.picklist([
+      "none",
+      "minimal",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+    ]),
+    authentication: validation.strictObject({
+      method: validation.literal(
+        "api-key",
+        "Grok subscription authentication is unsupported; use an API-key profile",
+      ),
+      keyEnvironment: environmentReference,
+    }),
+  }),
 ]);
 export const localLangfuseConnectionSchema = validation.strictObject({
   baseUrl: validation.pipe(validation.string(), validation.url()),
