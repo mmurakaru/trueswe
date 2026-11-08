@@ -129,13 +129,9 @@ export const experimentConfigurationSchema = validation.strictObject({
   langfuse: localLangfuseConnectionSchema,
 });
 export type ExperimentConfiguration = validation.InferOutput<typeof experimentConfigurationSchema>;
-export interface AttemptRecord {
-  identifier: string;
-  ordinal: number;
-  taskIdentifier: string;
-  agentName: string;
-  variantName: string;
-  repetition: number;
+export interface AttemptExecutionRecord {
+  warnings: string[];
+  executionNumber: number;
   state: "pending" | "running" | "completed" | "interrupted" | "execution-error";
   outcome: "pass" | "fail" | null;
   startedAt: string | null;
@@ -143,6 +139,8 @@ export interface AttemptRecord {
   durationSeconds: number | null;
   trajectoryPath: string | null;
   traceIdentifier: string | null;
+  observationIdentifier: string | null;
+  traceExportAttempted: boolean;
   inputTokens: number | null;
   outputTokens: number | null;
   costDollars: number | null;
@@ -150,6 +148,15 @@ export interface AttemptRecord {
   exceptionType: string | null;
   skillLoads: { name: string; version: number; path: string; eventReference: string }[];
   skillLoadEvidence: "observed" | "unknown" | "not-supplied";
+}
+export interface AttemptRecord extends AttemptExecutionRecord {
+  identifier: string;
+  ordinal: number;
+  taskIdentifier: string;
+  agentName: string;
+  variantName: string;
+  repetition: number;
+  executionHistory: AttemptExecutionRecord[];
 }
 export interface ExperimentRecord {
   schemaVersion: 2;
@@ -240,6 +247,39 @@ export async function writeExperimentRecord(path: string, value: ExperimentRecor
 
 const nullableNumber = validation.nullable(validation.number());
 const nullableText = validation.nullable(validation.string());
+const attemptExecutionFields = {
+  warnings: validation.optional(validation.array(validation.string()), []),
+  executionNumber: validation.optional(positiveInteger, 1),
+  state: validation.picklist(["pending", "running", "completed", "interrupted", "execution-error"]),
+  outcome: validation.nullable(validation.picklist(["pass", "fail"])),
+  startedAt: nullableText,
+  finishedAt: nullableText,
+  durationSeconds: nullableNumber,
+  trajectoryPath: nullableText,
+  traceIdentifier: nullableText,
+  observationIdentifier: validation.optional(nullableText, null),
+  traceExportAttempted: validation.optional(validation.boolean(), false),
+  inputTokens: nullableNumber,
+  outputTokens: nullableNumber,
+  costDollars: nullableNumber,
+  error: nullableText,
+  exceptionType: validation.optional(nullableText, null),
+  skillLoads: validation.optional(
+    validation.array(
+      validation.object({
+        name: validation.string(),
+        version: validation.number(),
+        path: validation.string(),
+        eventReference: validation.string(),
+      }),
+    ),
+    [],
+  ),
+  skillLoadEvidence: validation.optional(
+    validation.picklist(["observed", "unknown", "not-supplied"]),
+    "unknown",
+  ),
+};
 const experimentRecordSchema = validation.object({
   schemaVersion: validation.literal(2),
   configurationHash: validation.string(),
@@ -295,38 +335,10 @@ const experimentRecordSchema = validation.object({
       agentName: validation.string(),
       variantName: validation.string(),
       repetition: validation.number(),
-      state: validation.picklist([
-        "pending",
-        "running",
-        "completed",
-        "interrupted",
-        "execution-error",
-      ]),
-      outcome: validation.nullable(validation.picklist(["pass", "fail"])),
-      startedAt: nullableText,
-      finishedAt: nullableText,
-      durationSeconds: nullableNumber,
-      trajectoryPath: nullableText,
-      traceIdentifier: nullableText,
-      inputTokens: nullableNumber,
-      outputTokens: nullableNumber,
-      costDollars: nullableNumber,
-      error: nullableText,
-      exceptionType: validation.optional(nullableText, null),
-      skillLoads: validation.optional(
-        validation.array(
-          validation.object({
-            name: validation.string(),
-            version: validation.number(),
-            path: validation.string(),
-            eventReference: validation.string(),
-          }),
-        ),
+      ...attemptExecutionFields,
+      executionHistory: validation.optional(
+        validation.array(validation.object(attemptExecutionFields)),
         [],
-      ),
-      skillLoadEvidence: validation.optional(
-        validation.picklist(["observed", "unknown", "not-supplied"]),
-        "unknown",
       ),
     }),
   ),
@@ -336,5 +348,38 @@ export async function readExperimentRecord(path: string): Promise<ExperimentReco
   const record = validation.parse(experimentRecordSchema, JSON.parse(await readFile(path, "utf8")));
   if (record.configurationHash !== hashExperimentContent(JSON.stringify(record.configuration)))
     throw new Error("Stored experiment configuration changed");
+  if (record.inputHash !== hashExperimentContent(JSON.stringify(record.frozenInputs)))
+    throw new Error("Frozen input manifest changed");
+  const expectedCount =
+    record.configuration.tasks.length *
+    record.configuration.agents.length *
+    record.configuration.variants.length *
+    record.configuration.repetitions;
+  if (
+    record.attempts.length !== expectedCount ||
+    record.attempts.some((attempt, index) => attempt.ordinal !== index)
+  )
+    throw new Error("Stored attempt schedule changed");
+  for (const attempt of record.attempts) {
+    if ((attempt.state === "completed") !== (attempt.outcome !== null))
+      throw new Error("Stored attempt state and verified outcome disagree");
+  }
   return record;
+}
+
+export async function readFrozenExperiment(configurationPath: string): Promise<ExperimentRecord> {
+  const configuration = await readExperimentConfiguration(configurationPath);
+  const record = await readExperimentRecord(experimentRecordPath(configuration));
+  if (record.configurationHash !== hashExperimentContent(JSON.stringify(configuration)))
+    throw new Error("Frozen experiment configuration changed");
+  return record;
+}
+
+export function attemptExecutionDirectory(
+  record: ExperimentRecord,
+  attempt: AttemptRecord,
+  executionNumber = attempt.executionNumber,
+): string {
+  const root = resolve(record.configuration.outputDirectory, "attempts", attempt.identifier);
+  return executionNumber === 1 ? root : resolve(root, `retry-${executionNumber}`);
 }

@@ -72,6 +72,7 @@ const judgmentSchema = validation.object({
 });
 export const reviewRecordSchema = validation.object({
   schemaVersion: validation.literal(1),
+  executionNumber: validation.optional(validation.number(), 1),
   experimentHash: validation.string(),
   attemptIdentifier: identifierSchema,
   traceIdentifier: validation.nullable(validation.string()),
@@ -87,7 +88,13 @@ export type ReviewRecord = validation.InferOutput<typeof reviewRecordSchema>;
 
 export function reviewRecordPath(record: ExperimentRecord, identifier: string): string {
   validation.parse(identifierSchema, identifier);
-  return resolve(record.configuration.outputDirectory, "reviews", `${identifier}.json`);
+  const executionNumber =
+    record.attempts.find((attempt) => attempt.identifier === identifier)?.executionNumber ?? 1;
+  return resolve(
+    record.configuration.outputDirectory,
+    "reviews",
+    `${identifier}${executionNumber > 1 ? `-retry-${executionNumber}` : ""}.json`,
+  );
 }
 
 export async function readReviewRecord(path: string): Promise<ReviewRecord> {
@@ -103,23 +110,29 @@ export async function writeReviewRecord(path: string, record: ReviewRecord): Pro
 
 export async function experimentReviews(record: ExperimentRecord): Promise<ReviewRecord[]> {
   const rows = await Promise.all(
-    record.attempts.map(async (attempt) => {
-      const path = reviewRecordPath(record, attempt.identifier);
-      if (
-        !(await access(path).then(
-          () => true,
-          () => false,
-        ))
+    record.attempts
+      .flatMap((attempt) =>
+        [...attempt.executionHistory, attempt].map((execution) =>
+          Object.assign({}, attempt, execution),
+        ),
       )
-        return null;
-      const review = await readReviewRecord(path);
-      if (
-        review.experimentHash !== record.configurationHash ||
-        review.attemptIdentifier !== attempt.identifier
-      )
-        throw new Error("Review does not match its frozen experiment attempt");
-      return review;
-    }),
+      .map(async (attempt) => {
+        const path = reviewRecordPath({ ...record, attempts: [attempt] }, attempt.identifier);
+        if (
+          !(await access(path).then(
+            () => true,
+            () => false,
+          ))
+        )
+          return null;
+        const review = await readReviewRecord(path);
+        if (
+          review.experimentHash !== record.configurationHash ||
+          review.attemptIdentifier !== attempt.identifier
+        )
+          throw new Error("Review does not match its frozen experiment attempt");
+        return review;
+      }),
   );
   return rows.filter((row) => row !== null);
 }

@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { LangfuseClient } from "@langfuse/client";
 import { LangfuseSpanProcessor } from "@langfuse/otel";
 import {
@@ -48,6 +49,16 @@ export async function checkLocalLangfuse(
   const projects = await client.api.projects.get({}, { timeoutInSeconds: 10, maxRetries: 0 });
   if (!projects.data.some((project) => project.id === configuration.langfuse.projectIdentifier))
     throw new Error("Local Langfuse project does not match the experiment profile");
+  const now = new Date();
+  await client.api.observations.getMany(
+    {
+      limit: 1,
+      fields: "core",
+      fromStartTime: new Date(now.getTime() - 60_000).toISOString(),
+      toStartTime: now.toISOString(),
+    },
+    { timeoutInSeconds: 10, maxRetries: 0 },
+  );
 }
 
 export async function recordLangfuseAttempt(
@@ -62,7 +73,24 @@ export async function recordLangfuseAttempt(
     flushAt: 1,
     mediaUploadEnabled: false,
   });
-  const provider = new TracerProvider({ spanProcessors: [processor] });
+  if (!attempt.traceIdentifier || !attempt.observationIdentifier)
+    throw new Error("Attempt tracing identity must be allocated before export");
+  const reservedTraceIdentifier = attempt.traceIdentifier;
+  const observationIdentifier = attempt.observationIdentifier;
+  let firstSpan = true;
+  const provider = new TracerProvider({
+    spanProcessors: [processor],
+    idGenerator: {
+      generateTraceId: () => reservedTraceIdentifier,
+      generateSpanId: () => {
+        if (firstSpan) {
+          firstSpan = false;
+          return observationIdentifier;
+        }
+        return randomBytes(8).toString("hex");
+      },
+    },
+  });
   setLangfuseTracerProvider(provider);
   try {
     const availability = JSON.stringify(skills.map(({ name, version }) => ({ name, version })));
@@ -78,6 +106,15 @@ export async function recordLangfuseAttempt(
         output: { outcome: attempt.outcome, state: attempt.state },
         metadata: {
           experiment: configuration.name,
+          executionNumber: attempt.executionNumber,
+          previousExecutions: attempt.executionHistory.map(
+            ({ executionNumber, state, trajectoryPath, error }) => ({
+              executionNumber,
+              state,
+              trajectoryPath,
+              error,
+            }),
+          ),
           trajectoryPath: attempt.trajectoryPath,
           durationSeconds: attempt.durationSeconds,
           inputTokens: attempt.inputTokens,
@@ -93,7 +130,13 @@ export async function recordLangfuseAttempt(
           skillCatalogExposure: skills.length > 0 ? "unknown" : "not-supplied",
         },
       },
-      { startTime: attempt.startedAt ? new Date(attempt.startedAt) : new Date() },
+      {
+        startTime: attempt.executionHistory[0]?.startedAt
+          ? new Date(attempt.executionHistory[0].startedAt)
+          : attempt.startedAt
+            ? new Date(attempt.startedAt)
+            : new Date(),
+      },
     );
     observation.otelSpan.setAttribute(
       LangfuseOtelSpanAttributes.OBSERVATION_SKILLS_AVAILABLE,
@@ -105,7 +148,10 @@ export async function recordLangfuseAttempt(
         {
           input: { skillName: load.name, path: load.path.split(`/skills/${load.name}/`)[1] },
           output: { success: true },
-          metadata: { eventReference: load.eventReference },
+          metadata: {
+            eventReference: load.eventReference,
+            executionNumber: attempt.executionNumber,
+          },
         },
         { asType: "tool" },
       );

@@ -2,7 +2,9 @@ import { createServer } from "node:http";
 import { createHash } from "node:crypto";
 import { gunzipSync } from "node:zlib";
 
-export async function startLocalLangfuseFixture(): Promise<{
+export async function startLocalLangfuseFixture(
+  options: { observationsUnavailable?: boolean } = {},
+): Promise<{
   baseUrl: string;
   traceRequests: () => number;
   tracePayloads: () => string[];
@@ -16,6 +18,20 @@ export async function startLocalLangfuseFixture(): Promise<{
   const versions: Record<string, unknown>[] = [];
   const selections: string[] = [];
   const server = createServer(async (request, response) => {
+    if (request.url?.startsWith("/api/public/v2/observations")) {
+      request.resume();
+      response.writeHead(options.observationsUnavailable ? 503 : 200, {
+        "content-type": "application/json",
+      });
+      response.end(
+        JSON.stringify(
+          options.observationsUnavailable
+            ? { message: "Local observation storage unavailable" }
+            : { data: [], meta: {} },
+        ),
+      );
+      return;
+    }
     if (request.url === "/api/public/scores" && request.method === "POST") {
       const chunks: Buffer[] = [];
       for await (const chunk of request) chunks.push(Buffer.from(chunk));

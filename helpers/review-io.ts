@@ -44,6 +44,7 @@ async function boundReview(
 ): Promise<ReviewRecord> {
   const review = await readReviewRecord(context.path);
   if (
+    review.executionNumber !== context.attempt.executionNumber ||
     review.experimentHash !== context.record.configurationHash ||
     review.attemptIdentifier !== context.attempt.identifier ||
     review.traceIdentifier !== context.attempt.traceIdentifier
@@ -104,6 +105,7 @@ export async function prepareAttemptReview(
   await withFileRecordLock(context.path, async () => {
     const review: ReviewRecord = (await existingReview(context)) ?? {
       schemaVersion: 1,
+      executionNumber: context.attempt.executionNumber,
       experimentHash: context.record.configurationHash,
       attemptIdentifier: request.attemptIdentifier,
       traceIdentifier: context.attempt.traceIdentifier,

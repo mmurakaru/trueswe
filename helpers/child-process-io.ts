@@ -5,12 +5,15 @@ export interface ExternalProcessResult {
   output: string;
   errors: string;
   timedOut: boolean;
+  interruptedBySignal: boolean;
+  outputExceeded: boolean;
 }
 export async function runExternalProcess(
   program: string,
   argumentsList: string[],
   environment: NodeJS.ProcessEnv,
   timeoutMilliseconds: number,
+  onSpawn?: (processIdentifier: number) => Promise<void>,
 ): Promise<ExternalProcessResult> {
   return new Promise((resolve, reject) => {
     const child = spawn(program, argumentsList, {
@@ -21,7 +24,10 @@ export async function runExternalProcess(
     let output = "";
     let errors = "";
     let timedOut = false;
+    let interruptedBySignal = false;
     let outputExceeded = false;
+    let ownership = Promise.resolve();
+    let ownershipError: unknown;
     const terminate = () => {
       if (child.pid) {
         try {
@@ -40,17 +46,26 @@ export async function runExternalProcess(
         }
       }
     };
-    const timer = setTimeout(() => {
+    let killTimer: NodeJS.Timeout | undefined;
+    const stop = () => {
       timedOut = true;
       terminate();
-    }, timeoutMilliseconds);
-    const killTimer = setTimeout(forceTerminate, timeoutMilliseconds + 2000);
+      killTimer ??= setTimeout(forceTerminate, 2000);
+    };
+    const timer = setTimeout(stop, timeoutMilliseconds);
     const onSignal = () => {
-      timedOut = true;
-      terminate();
+      interruptedBySignal = true;
+      stop();
     };
     process.once("SIGINT", onSignal);
     process.once("SIGTERM", onSignal);
+    child.once("spawn", () => {
+      if (onSpawn && child.pid)
+        ownership = onSpawn(child.pid).catch((error: unknown) => {
+          ownershipError = error;
+          forceTerminate();
+        });
+    });
     child.stdout.on("data", (chunk: Buffer) => {
       output += chunk.toString();
       if (output.length + errors.length > 1_000_000) {
@@ -75,8 +90,13 @@ export async function runExternalProcess(
       cleanup();
       reject(error);
     });
-    child.once("close", (status) => {
+    child.once("close", async (status) => {
       cleanup();
+      await ownership;
+      if (ownershipError) {
+        reject(ownershipError);
+        return;
+      }
       resolve({
         status: outputExceeded ? 1 : (status ?? 1),
         output: output.slice(0, 1_000_000),
@@ -84,6 +104,8 @@ export async function runExternalProcess(
           ? "External process output limit exceeded"
           : errors.slice(0, 1_000_000),
         timedOut,
+        interruptedBySignal,
+        outputExceeded,
       });
     });
   });
