@@ -93,12 +93,15 @@ def run_experiment(+configuration: String) -> IO(Unit):
     facts : String <- helper_output(facts_result)
     validate_comparison(U32.read(facts), count, configuration)
 
-def finalize_review(confidence: Maybe<&2, U32>, request: String, identifier: String) -> IO(Unit):
+def finalize_review(confidence: Maybe<&2, U32>, +request: String, +identifier: String) -> IO(Unit):
   match confidence:
     case None{}:
       IO.die(Unit, 1, "Integration helper returned invalid review confidence")
     case Some{basis_points}:
-      run_helper(["finalize-review", request, Review.review_status(basis_points), identifier])
+      do IO<Unit>:
+        result : U32 & (String & String) <- invoke_helper(["review-kind", request, identifier])
+        kind : String <- helper_output(result)
+        run_helper(["finalize-review", request, Review.review_status(basis_points, kind), identifier])
 
 def review_attempt(+request: String) -> IO(Unit):
   do IO<Unit>:

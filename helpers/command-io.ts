@@ -10,6 +10,9 @@ try {
   } else if (process.argv[2] === "review-identifier") {
     const { randomUUID } = await import("node:crypto");
     process.stdout.write(randomUUID());
+  } else if (process.argv[2] === "review-kind" && process.argv[3] && process.argv[4]) {
+    const { readReviewJudgmentKind } = await import("./review-io.ts");
+    process.stdout.write(await readReviewJudgmentKind(process.argv[3], process.argv[4]));
   } else if (process.argv[2] === "prepare-review" && process.argv[3] && process.argv[4]) {
     const { prepareAttemptReview } = await import("./review-io.ts");
     process.stdout.write(String(await prepareAttemptReview(process.argv[3], process.argv[4])));

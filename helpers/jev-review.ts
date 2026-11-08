@@ -100,7 +100,7 @@ export async function requestJevJudgment(
     judgment.category = answer.choice;
     judgment.confidence = answer.confidence;
     judgment.probabilities = answer.probabilities;
-    return answer.choice === "none" ? 0 : Math.floor(answer.confidence * 10_000);
+    return Math.floor(answer.confidence * 10_000);
   } catch (error) {
     judgment.error = redactRuntimeSecrets(
       error instanceof Error ? error.message : "TypeSafe review request failed",

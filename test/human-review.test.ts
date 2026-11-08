@@ -15,6 +15,7 @@ test("Jev suggestions and explicit human labels preserve verified outcomes and r
   const received: string[] = [];
   let confidence = 0.9;
   let apiFailure = false;
+  let noCategory = false;
   let gate: { received: number; release: Promise<void>; reached: () => void } | null = null;
   const gateRelease = Promise.withResolvers<void>();
   const concurrentCalls: ReturnType<typeof launchExperimentCommand>[] = [];
@@ -47,7 +48,7 @@ test("Jev suggestions and explicit human labels preserve verified outcomes and r
               answers: {
                 reviewCategory: {
                   type: "choice",
-                  choice: "wrong-path",
+                  choice: noCategory ? "none" : "wrong-path",
                   confidence: responseConfidence,
                   probabilities: {
                     "wrong-path": responseConfidence,
@@ -185,6 +186,7 @@ test("Jev suggestions and explicit human labels preserve verified outcomes and r
     apiFailure = true;
     const unavailable = await launchExperimentCommand(["review", requestPath], environment);
     assert.equal(unavailable.status, 0, unavailable.output);
+    assert.match(unavailable.output, /unavailable/);
     review = JSON.parse(await readFile(reviewPath, "utf8"));
     assert.equal(review.status, "manual-review");
     assert.match(review.judgments.at(-1)?.error ?? "", /unavailable/);
@@ -254,6 +256,21 @@ test("Jev suggestions and explicit human labels preserve verified outcomes and r
       assert.equal(review.status, review.judgments.at(-1)?.status);
     }
     await verifyConcurrentReviews();
+    gate = null;
+    confidence = 0.95;
+    noCategory = true;
+    const noSuggestion = await launchExperimentCommand(["review", requestPath], environment);
+    assert.equal(noSuggestion.status, 0, noSuggestion.output);
+    review = JSON.parse(await readFile(reviewPath, "utf8"));
+    assert.equal(review.status, "manual-review");
+    assert.equal(review.judgments.at(-1)?.confidence, 0.95);
+    assert.equal(review.judgments.at(-1)?.category, "none");
+    const missingKey = await launchExperimentCommand(["review", requestPath], {
+      ...environment,
+      CUSTOM_ROUTER_AUTH: "",
+    });
+    assert.equal(missingKey.status, 0, missingKey.output);
+    assert.match(missingKey.output, /credential reference is unavailable/);
   } finally {
     gateRelease.resolve();
     await Promise.allSettled(concurrentCalls);

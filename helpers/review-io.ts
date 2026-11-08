@@ -122,6 +122,24 @@ export async function prepareAttemptReview(
   return confidence;
 }
 
+export async function readReviewJudgmentKind(
+  requestPath: string,
+  identifier: string,
+): Promise<string> {
+  const request = validation.parse(
+    reviewRequestSchema,
+    JSON.parse(await readFile(requestPath, "utf8")),
+  );
+  const context = await reviewContext(
+    request.experimentConfigurationPath,
+    request.attemptIdentifier,
+  );
+  const review = await boundReview(context);
+  const judgment = review.judgments.find((item) => item.identifier === identifier);
+  if (!judgment) throw new Error("Review has no matching judgment");
+  return judgment.error ? "request-error" : (judgment.category ?? "none");
+}
+
 export async function finalizeAttemptReview(
   requestPath: string,
   status: string,
@@ -174,7 +192,7 @@ export async function finalizeAttemptReview(
     await writeReviewRecord(context.path, review);
     await writeExperimentReport(context.record);
     console.log(
-      `${request.attemptIdentifier}: ${judgment.status}. No category is accepted without human confirmation.`,
+      `${request.attemptIdentifier}: ${judgment.status}.${judgment.error ? ` ${judgment.error}` : ""} No category is accepted without human confirmation.`,
     );
   });
 }

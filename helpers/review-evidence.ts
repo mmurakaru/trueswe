@@ -40,9 +40,10 @@ export async function registerCredentialFileValues(record: ExperimentRecord): Pr
 function excerpt(text: string, byteLimit: number): { text: string; truncated: boolean } {
   const safe = redactRuntimeSecrets(text);
   const bytes = Buffer.from(safe);
-  return bytes.length <= byteLimit
-    ? { text: safe, truncated: false }
-    : { text: bytes.subarray(0, byteLimit - 3).toString("utf8"), truncated: true };
+  if (bytes.length <= byteLimit) return { text: safe, truncated: false };
+  let end = byteLimit - 3;
+  while (end > 0 && (bytes[end]! & 0xc0) === 0x80) end -= 1;
+  return { text: bytes.subarray(0, end).toString("utf8") + "...", truncated: true };
 }
 
 function redactEvidenceStrings(value: unknown): unknown {
