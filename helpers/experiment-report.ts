@@ -2,6 +2,35 @@ import { writeFile } from "node:fs/promises";
 import { resolve, relative } from "node:path";
 import type { ExperimentRecord } from "./experiment-record.ts";
 import { summarizeExperimentComparison } from "./comparison-summary.ts";
+import { experimentReviews } from "./review-record.ts";
+
+async function humanReviewReport(record: ExperimentRecord): Promise<string[]> {
+  const reviews = await experimentReviews(record);
+  if (reviews.length === 0) return [];
+  const lines = [
+    "",
+    "## Human review",
+    "",
+    "Jev suggestions remain unconfirmed until a human accepts a category.",
+    "Failed tool calls alone are not confirmed harmful errors.",
+    "",
+  ];
+  for (const review of reviews) {
+    const judgment = review.judgments.at(-1);
+    lines.push(
+      `- [${review.attemptIdentifier} review](reviews/${review.attemptIdentifier}.json): ${review.status}. Suggestion: ${judgment?.category ?? "unknown"}, confidence ${judgment?.confidence ?? "unknown"}.`,
+    );
+    lines.push(
+      `  Human decision: ${review.decision?.status ?? "pending"}. Accepted category: ${review.decision?.status === "accepted" ? review.decision.category : "none"}.`,
+    );
+    if (review.decision)
+      lines.push(
+        `  Evidence: ${review.decision.evidenceReference}. ${review.decision.explanation.replaceAll("\n", " ")}`,
+      );
+    if (judgment?.error) lines.push(`  ${judgment.error.replaceAll("\n", " ")}`);
+  }
+  return lines;
+}
 
 function skillLoadReport(attempt: ExperimentRecord["attempts"][number]): string[] {
   return [
@@ -88,6 +117,7 @@ export async function writeExperimentReport(record: ExperimentRecord): Promise<v
       `  Duration: ${attempt.durationSeconds ?? "unknown"} seconds. Input tokens: ${attempt.inputTokens ?? "unknown"}. Output tokens: ${attempt.outputTokens ?? "unknown"}. Cost: ${attempt.costDollars ?? "unknown"}.`,
     );
   }
+  lines.push(...(await humanReviewReport(record)));
   await writeFile(
     resolve(record.configuration.outputDirectory, "report.md"),
     lines.join("\n") + "\n",

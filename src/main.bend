@@ -1,9 +1,10 @@
 import Base
 import ./attempt-policy.bend as Attempt
 import ./experiment-policy.bend as Experiment
+import ./review-policy.bend as Review
 
 def print_help() -> IO(Unit):
-  IO.print("TrueSWE\n\nUsage: trueswe --help | --version | plan CONFIG | run CONFIG | snapshot REQUEST | verify-snapshot DIRECTORY | publish-skill REQUEST\n\nLocal coding-agent experiments with verified task outcomes.")
+  IO.print("TrueSWE\n\nUsage: trueswe --help | --version | plan CONFIG | run CONFIG | snapshot REQUEST | verify-snapshot DIRECTORY | publish-skill REQUEST | review REQUEST | reviews CONFIG | label REQUEST\n\nLocal coding-agent experiments with verified task outcomes.")
 
 def finish_helper(result: U32 & (String & String)) -> IO(Unit):
   (status, (output, errors)) = result
@@ -92,40 +93,68 @@ def run_experiment(+configuration: String) -> IO(Unit):
     facts : String <- helper_output(facts_result)
     validate_comparison(U32.read(facts), count, configuration)
 
-def route_skill_publication(is_publication: Bool, request: String) -> IO(Unit):
-  match is_publication:
-    case True{}:
-      run_helper(["publish-skill", request])
-    case False{}:
-      IO.die(Unit, 2, "Unknown command. Use --help.")
+def finalize_review(confidence: Maybe<&2, U32>, request: String) -> IO(Unit):
+  match confidence:
+    case None{}:
+      IO.die(Unit, 1, "Integration helper returned invalid review confidence")
+    case Some{basis_points}:
+      run_helper(["finalize-review", request, Review.review_status(basis_points)])
 
-def route_snapshot_verification(is_verification: Bool, command: String, directory: String) -> IO(Unit):
-  match is_verification:
-    case True{}:
-      run_helper(["verify-snapshot", directory])
-    case False{}:
-      route_skill_publication(String.eq(command, "publish-skill"), directory)
+def review_attempt(+request: String) -> IO(Unit):
+  do IO<Unit>:
+    result : U32 & (String & String) <- invoke_helper(["prepare-review", request])
+    confidence : String <- helper_output(result)
+    finalize_review(U32.read(confidence), request)
 
-def route_snapshot(is_snapshot: Bool, +command: String, configuration: String) -> IO(Unit):
-  match is_snapshot:
-    case True{}:
-      run_helper(["snapshot", configuration])
-    case False{}:
-      route_snapshot_verification(String.eq(command, "verify-snapshot"), command, configuration)
+def label_attempt(+request: String) -> IO(Unit):
+  do IO<Unit>:
+    result : U32 & (String & String) <- invoke_helper(["label-action", request])
+    action : String <- helper_output(result)
+    run_helper(["label", request, Review.human_label_status(action)])
 
-def route_plan(is_plan: Bool, +command: String, configuration: String) -> IO(Unit):
-  match is_plan:
-    case True{}:
-      run_helper(["plan", configuration])
-    case False{}:
-      route_snapshot(String.eq(command, "snapshot"), command, configuration)
+type ConfigurationCommand is Data:
+  RunCommand{}
+  PlanCommand{}
+  SnapshotCommand{}
+  VerifySnapshotCommand{}
+  PublishSkillCommand{}
+  ReviewCommand{}
+  ReviewsCommand{}
+  LabelCommand{}
+  UnknownCommand{}
 
-def route_run(is_run: Bool, +command: String, configuration: String) -> IO(Unit):
-  match is_run:
-    case True{}:
+def configuration_command(name: String) -> ConfigurationCommand:
+  table = Map.new(&2, ConfigurationCommand)
+  table = Map.set(&2, ConfigurationCommand, table, "run", RunCommand{})
+  table = Map.set(&2, ConfigurationCommand, table, "plan", PlanCommand{})
+  table = Map.set(&2, ConfigurationCommand, table, "snapshot", SnapshotCommand{})
+  table = Map.set(&2, ConfigurationCommand, table, "verify-snapshot", VerifySnapshotCommand{})
+  table = Map.set(&2, ConfigurationCommand, table, "publish-skill", PublishSkillCommand{})
+  table = Map.set(&2, ConfigurationCommand, table, "review", ReviewCommand{})
+  table = Map.set(&2, ConfigurationCommand, table, "reviews", ReviewsCommand{})
+  table = Map.set(&2, ConfigurationCommand, table, "label", LabelCommand{})
+  Pair.snd(Map<&2, ConfigurationCommand>, ConfigurationCommand, Map.get(ConfigurationCommand, UnknownCommand{}, table, name))
+
+def route_configuration(command: ConfigurationCommand, configuration: String) -> IO(Unit):
+  match command:
+    case RunCommand{}:
       run_experiment(configuration)
-    case False{}:
-      route_plan(String.eq(command, "plan"), command, configuration)
+    case PlanCommand{}:
+      run_helper(["plan", configuration])
+    case SnapshotCommand{}:
+      run_helper(["snapshot", configuration])
+    case VerifySnapshotCommand{}:
+      run_helper(["verify-snapshot", configuration])
+    case PublishSkillCommand{}:
+      run_helper(["publish-skill", configuration])
+    case ReviewCommand{}:
+      review_attempt(configuration)
+    case ReviewsCommand{}:
+      run_helper(["reviews", configuration])
+    case LabelCommand{}:
+      label_attempt(configuration)
+    case UnknownCommand{}:
+      IO.die(Unit, 2, "Unknown command. Use --help.")
 
 def route_version(is_version: Bool) -> IO(Unit):
   match is_version:
@@ -150,7 +179,7 @@ def route_arguments(arguments: List<String>) -> IO(Unit):
     case Con{_, Con{+command, Nil{}}}:
       route_help(String.eq(command, "--help"), command)
     case Con{_, Con{+command, Con{configuration, Nil{}}}}:
-      route_run(String.eq(command, "run"), command, configuration)
+      route_configuration(configuration_command(command), configuration)
     case Con{_, Con{_, Con{_, Con{_, _}}}}:
       IO.die(Unit, 2, "Unexpected arguments. Use --help.")
 

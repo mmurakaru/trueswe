@@ -7,6 +7,21 @@ try {
       await readFile(new URL("../package.json", import.meta.url), "utf8"),
     );
     console.log(`trueswe ${manifest.version}`);
+  } else if (process.argv[2] === "prepare-review" && process.argv[3]) {
+    const { prepareAttemptReview } = await import("./review-io.ts");
+    process.stdout.write(String(await prepareAttemptReview(process.argv[3])));
+  } else if (process.argv[2] === "finalize-review" && process.argv[3] && process.argv[4]) {
+    const { finalizeAttemptReview } = await import("./review-io.ts");
+    await finalizeAttemptReview(process.argv[3], process.argv[4]);
+  } else if (process.argv[2] === "label-action" && process.argv[3]) {
+    const { readHumanLabelAction } = await import("./review-io.ts");
+    process.stdout.write(await readHumanLabelAction(process.argv[3]));
+  } else if (process.argv[2] === "label" && process.argv[3] && process.argv[4]) {
+    const { recordHumanLabel } = await import("./review-io.ts");
+    await recordHumanLabel(process.argv[3], process.argv[4]);
+  } else if (process.argv[2] === "reviews" && process.argv[3]) {
+    const { listExperimentReviews } = await import("./review-io.ts");
+    await listExperimentReviews(process.argv[3]);
   } else if (process.argv[2] === "publish-skill" && process.argv[3]) {
     const { publishManagedSkill } = await import("./managed-skills.ts");
     console.log(JSON.stringify(await publishManagedSkill(process.argv[3]), null, 2));
