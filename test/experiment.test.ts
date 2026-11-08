@@ -1,32 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { spawn } from "node:child_process";
 import { mkdtemp, readFile, writeFile, cp, rm, chmod } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve as resolvePath } from "node:path";
 import type { ExperimentRecord } from "../helpers/experiment-record.ts";
 
-async function launchExperimentCommand(
-  argumentsList: string[],
-  environment: NodeJS.ProcessEnv,
-): Promise<{ status: number | null; output: string }> {
-  const child = spawn(process.execPath, ["scripts/run-bend.ts", ...argumentsList], {
-    env: environment,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  let output = "";
-  child.stdout.on("data", (value: Buffer) => {
-    output += value.toString();
-  });
-  child.stderr.on("data", (value: Buffer) => {
-    output += value.toString();
-  });
-  return new Promise((resolve, reject) => {
-    child.once("error", reject);
-    child.once("close", (status) => resolve({ status, output }));
-  });
-}
+import { launchExperimentCommand } from "./command-test-support.ts";
 
 test("CLI preserves independently verified outcomes and distinguishes execution errors", async () => {
   const temporaryDirectory = await mkdtemp(join(tmpdir(), "trueswe-experiment-test-"));

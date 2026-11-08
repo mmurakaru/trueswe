@@ -52,6 +52,30 @@ try {
         2,
       ),
     );
+  } else if (process.argv[2] === "snapshot" && process.argv[3]) {
+    const { createTaskSnapshot } = await import("./task-snapshot.ts");
+    const snapshot = await createTaskSnapshot(process.argv[3]);
+    console.log(
+      JSON.stringify(
+        {
+          identifier: snapshot.identifier,
+          split: snapshot.split,
+          taskContentHash: snapshot.taskContentHash,
+        },
+        null,
+        2,
+      ),
+    );
+  } else if (process.argv[2] === "verify-snapshot" && process.argv[3]) {
+    const { verifyTaskSnapshot } = await import("./task-snapshot.ts");
+    const snapshot = await verifyTaskSnapshot(process.argv[3]);
+    console.log(
+      JSON.stringify(
+        { identifier: snapshot.identifier, taskContentHash: snapshot.taskContentHash },
+        null,
+        2,
+      ),
+    );
   } else {
     console.error("Unknown integration operation");
     process.exitCode = 2;
