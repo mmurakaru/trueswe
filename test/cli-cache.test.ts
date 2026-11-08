@@ -5,8 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import { runExternalProcess } from "../helpers/child-process-io.ts";
 
-test("CLI reuses compiled commands and recompiles changed Bend source", async () => {
+test("CLI serializes cold compilation and recompiles changed Bend source", async () => {
   const directory = await mkdtemp(join(tmpdir(), "trueswe-cli-cache-"));
   try {
     const application = join(directory, "application");
@@ -24,10 +25,7 @@ test("CLI reuses compiled commands and recompiles changed Bend source", async ()
     ]);
     const compiler = join(directory, "compiler");
     const counter = join(directory, "compilations.log");
-    await writeFile(
-      compiler,
-      '#!/usr/bin/env node\nimport { appendFileSync } from "node:fs";\nimport { spawnSync } from "node:child_process";\nif (process.argv.includes("-o")) appendFileSync(process.env.TRUESWE_COMPILATION_COUNTER, "compile\\n");\nconst result = spawnSync(process.env.TRUESWE_REAL_BEND, process.argv.slice(2), { stdio: "inherit" });\nprocess.exit(result.status ?? 1);\n',
-    );
+    await cp("test/fixtures/slow-compiler.mjs", compiler);
     await chmod(compiler, 0o700);
     const environment = {
       ...process.env,
@@ -37,19 +35,23 @@ test("CLI reuses compiled commands and recompiles changed Bend source", async ()
         fileURLToPath(new URL("../.tools/bend/bin/bend", import.meta.url)),
       TRUESWE_COMPILATION_COUNTER: counter,
     };
-    const first = spawnSync(
-      process.execPath,
-      [join(application, "scripts/run-bend.ts"), "--help"],
-      { encoding: "utf8", env: environment },
+    const starts = await Promise.allSettled(
+      [1, 2].map(() =>
+        runExternalProcess(
+          process.execPath,
+          [join(application, "scripts/run-bend.ts"), "--help"],
+          environment,
+          50_000,
+        ),
+      ),
     );
-    assert.equal(first.status, 0, first.stderr);
-    const second = spawnSync(
-      process.execPath,
-      [join(application, "scripts/run-bend.ts"), "--help"],
-      { encoding: "utf8", env: environment },
-    );
-    assert.equal(second.status, 0, second.stderr);
-    assert.equal(second.stdout, first.stdout);
+    const outputs: string[] = [];
+    for (const start of starts) {
+      if (start.status === "rejected") throw start.reason;
+      assert.equal(start.value.status, 0, start.value.errors);
+      outputs.push(start.value.output);
+    }
+    assert.equal(outputs[0], outputs[1]);
     assert.equal((await readFile(counter, "utf8")).trim().split("\n").length, 1);
     const sourcePath = join(application, "src/main.bend");
     const source = await readFile(sourcePath, "utf8");
