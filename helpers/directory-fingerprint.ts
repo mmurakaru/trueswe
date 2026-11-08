@@ -13,12 +13,22 @@ async function fingerprintDirectoryEntries(directory: string, prefix: string): P
         const fullPath = join(directory, entry.name);
         if (entry.isSymbolicLink())
           throw new Error(`Snapshot symbolic links are unsupported: ${relativePath}`);
-        if (entry.isDirectory()) return fingerprintDirectoryEntries(fullPath, `${relativePath}/`);
+        if (entry.isDirectory()) {
+          const information = await stat(fullPath);
+          return [JSON.stringify(["directory", relativePath, information.mode & 0o777])].concat(
+            await fingerprintDirectoryEntries(fullPath, `${relativePath}/`),
+          );
+        }
         if (!entry.isFile())
           throw new Error(`Snapshot entry is not a regular file: ${relativePath}`);
         const [content, information] = await Promise.all([readFile(fullPath), stat(fullPath)]);
         return [
-          JSON.stringify([relativePath, information.mode & 0o111, hashExperimentContent(content)]),
+          JSON.stringify([
+            "file",
+            relativePath,
+            information.mode & 0o777,
+            hashExperimentContent(content),
+          ]),
         ];
       }),
     )

@@ -151,6 +151,7 @@ export async function createTaskSnapshot(requestPath: string): Promise<TaskSnaps
       request.startingCommit,
     ]);
     const checkoutPath = join(taskPath, "environment", "repository");
+    await rm(checkoutPath, { recursive: true, force: true });
     await mkdir(checkoutPath, { recursive: true });
     await checkedSnapshotProcess("tar", ["-xf", archivePath, "-C", checkoutPath]);
     const dockerfilePath = join(taskPath, "environment", "Dockerfile");

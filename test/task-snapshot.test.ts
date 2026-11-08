@@ -48,6 +48,12 @@ test("snapshot CLI freezes committed source and issue evidence, then detects cha
     await chmod(github, 0o700);
     const template = join(temporaryDirectory, "template");
     await cp("tasks/smoke", template, { recursive: true });
+    await mkdir(join(template, "environment", "required-empty"));
+    await mkdir(join(template, "environment", "repository"), { recursive: true });
+    await writeFile(
+      join(template, "environment", "repository", "template-only.txt"),
+      "not part of the commit",
+    );
     const output = join(temporaryDirectory, "snapshot");
     const request = {
       schemaVersion: 1,
@@ -84,8 +90,23 @@ test("snapshot CLI freezes committed source and issue evidence, then detects cha
       ),
       false,
     );
+    assert.equal(
+      await access(join(output, "task/environment/repository/template-only.txt")).then(
+        () => true,
+        () => false,
+      ),
+      false,
+    );
     const verification = await launchExperimentCommand(["verify-snapshot", output], environment);
     assert.equal(verification.status, 0, verification.output);
+    await rm(join(output, "task/environment/required-empty"), { recursive: true });
+    const missingDirectory = await launchExperimentCommand(
+      ["verify-snapshot", output],
+      environment,
+    );
+    assert.notEqual(missingDirectory.status, 0);
+    assert.match(missingDirectory.output, /Frozen task content changed/);
+    await mkdir(join(output, "task/environment/required-empty"));
     const overwrite = await launchExperimentCommand(["snapshot", requestPath], environment);
     assert.notEqual(overwrite.status, 0);
     assert.match(overwrite.output, /already exists/);
