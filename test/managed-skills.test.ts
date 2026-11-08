@@ -191,6 +191,12 @@ test("managed skill CLI publishes complete bundles, pins selectors and rejects m
     assert.equal(examples.status, 0, examples.output);
     assert.match(examples.output, /"sourceRevision": null/);
     await writeFile(join(skillDirectory, "SKILL.md"), source);
+    await writeFile(join(directory, ".gitignore"), "skill/ignored.md\n");
+    await writeFile(join(skillDirectory, "ignored.md"), "Unversioned resource");
+    const ignored = await launchExperimentCommand(["publish-skill", requestPath], environment);
+    assert.equal(ignored.status, 0, ignored.output);
+    assert.match(ignored.output, /"sourceRevision": null/);
+    await writeFile(join(skillDirectory, "SKILL.md"), source);
   } finally {
     await langfuse.close();
     await rm(directory, { recursive: true, force: true });

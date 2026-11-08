@@ -165,6 +165,7 @@ export async function publishManagedSkill(
       "status",
       "--porcelain",
       "--untracked-files=all",
+      "--ignored=matching",
       "--",
       ".",
     ],
