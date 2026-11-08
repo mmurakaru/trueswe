@@ -1,0 +1,30 @@
+{
+  "name": "trueswe",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "setup": "node scripts/install-bend.ts",
+    "start": "node scripts/run-bend.ts",
+    "build": "node scripts/build-release.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint --deny-warnings",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "check:bend": "node scripts/run-bend.ts --check-only",
+    "test": "node --test --test-timeout=60000 test/*.test.ts",
+    "check": "npm run typecheck && npm run lint && npm run format:check && npm run check:bend && npm test",
+    "changeset": "changeset",
+    "version:prepare": "changeset version && npm install --package-lock-only --ignore-scripts"
+  },
+  "devDependencies": {
+    "@changesets/cli": "3.0.3",
+    "@types/node": "24.19.2",
+    "oxfmt": "0.77.0",
+    "oxlint": "1.92.0",
+    "typescript": "7.0.2"
+  },
+  "engines": {
+    "node": ">=24.12.0 <25"
+  }
+}

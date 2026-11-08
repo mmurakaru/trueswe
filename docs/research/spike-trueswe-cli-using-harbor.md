@@ -52,7 +52,6 @@ Bend owns TrueSWE commands, experiment flow, and outcome rules.
 TypeScript helpers perform external I/O and validate external or persisted data.
 Use the native Harbor task format and preserve result artifacts alongside TrueSWE experiment records.
 
-
 _Confidence: 82%_
 
 ## Accepted decisions and remaining questions

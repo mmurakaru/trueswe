@@ -1,0 +1,3 @@
+{
+  "ignorePatterns": ["skills/**", "docs/spec.md", "package-lock.json", ".tools/**", "dist/**"]
+}

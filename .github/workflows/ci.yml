@@ -1,0 +1,50 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  checks:
+    strategy:
+      matrix:
+        runner: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: "24.18.1"
+          cache: npm
+      - run: npm ci
+      - run: npm run setup
+      - run: npm run check
+      - run: npm run build
+      - name: Check release archive
+        run: |
+          cd dist
+          shasum -a 256 -c checksums.txt
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: source-${{ runner.os }}
+          path: |
+            dist/*.tar.gz
+            dist/checksums.txt
+          if-no-files-found: error
+  changeset:
+    if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'changeset-release/')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: "24.18.1"
+      - run: npm ci
+      - run: npm exec changeset status -- --since=origin/${{ github.base_ref }}
