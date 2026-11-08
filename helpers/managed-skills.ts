@@ -2,6 +2,8 @@ import { readdir, readFile, writeFile, mkdir, stat } from "node:fs/promises";
 import { join, resolve, extname, dirname, posix } from "node:path";
 import { createHash } from "node:crypto";
 import { parse as parseYaml } from "yaml";
+import { fromMarkdown } from "mdast-util-from-markdown";
+import type { Nodes } from "mdast";
 import * as validation from "valibot";
 import format from "../tools/langfuse-skill-format.json" with { type: "json" };
 import {
@@ -35,12 +37,16 @@ function validateManagedSkillLinks(files: ManagedSkillFiles, paths: Set<string>)
   for (const file of files.filter((item) =>
     [".md", ".markdown", ".mdx"].includes(extname(item.path)),
   )) {
-    const links = [
-      ...file.content.matchAll(/\]\((?:<([^>]+)>|([^\s)]+))(?:\s+[^)]*)?\)/g),
-      ...file.content.matchAll(/^\s*\[[^\]]+\]:\s*(?:<([^>]+)>|(\S+))/gm),
-    ];
-    for (const link of links) {
-      const target = link[1] ?? link[2] ?? "";
+    const pending: Nodes[] = [fromMarkdown(file.content)];
+    const links: string[] = [];
+    while (pending.length > 0) {
+      const node = pending.pop();
+      if (!node) continue;
+      if ("children" in node) pending.push(...node.children);
+      if (["link", "image", "definition"].includes(node.type) && "url" in node)
+        links.push(node.url);
+    }
+    for (const target of links) {
       if (/^[a-z][a-z0-9+.-]*:/i.test(target) || target.startsWith("#")) continue;
       const decoded = decodeURIComponent(target.split(/[?#]/)[0] ?? "");
       const path = posix.normalize(posix.join(posix.dirname(file.path), decoded));

@@ -56,6 +56,7 @@ test("managed skill CLI publishes complete bundles, pins selectors and rejects m
     assert.notEqual(executable.status, 0);
     assert.match(executable.output, /cannot preserve executable permissions/);
     await rm(join(skillDirectory, "run.sh"));
+
     const helper = join(directory, "harbor-fixture");
     await cp("test/fixtures/harbor-fixture.mjs", helper);
     await chmod(helper, 0o700);
@@ -148,6 +149,14 @@ test("managed skill CLI publishes complete bundles, pins selectors and rejects m
       await readFile(join(configuration.outputDirectory, "experiment.json"), "utf8"),
     );
     assert.ok(rejected.attempts.every((attempt) => attempt.state === "pending"));
+    await writeFile(
+      join(skillDirectory, "SKILL.md"),
+      source +
+        "\n```markdown\n[Generated report](generated.md)\n```\n`[Inline example](example.md)`\n\\[Escaped example](escaped.md)\n",
+    );
+    const examples = await launchExperimentCommand(["publish-skill", requestPath], environment);
+    assert.equal(examples.status, 0, examples.output);
+    await writeFile(join(skillDirectory, "SKILL.md"), source);
   } finally {
     await langfuse.close();
     await rm(directory, { recursive: true, force: true });
