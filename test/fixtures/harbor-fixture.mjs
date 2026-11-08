@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, access } from "node:fs/promises";
 import { join } from "node:path";
 if (process.argv.includes("--version")) {
   console.log("harbor, version 0.25.0");
@@ -20,6 +20,20 @@ for (const name of fixture.requiredEnvironmentNames ?? []) {
 for (const name of fixture.forbiddenEnvironmentNames ?? []) {
   if (process.env[name]) throw new Error(`Unexpected fixture environment was forwarded: ${name}`);
 }
+async function waitForRelease(path, remaining = 500) {
+  if (
+    await access(path).then(
+      () => true,
+      () => false,
+    )
+  )
+    return;
+  if (remaining === 0) throw new Error("Fixture release did not arrive");
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  return waitForRelease(path, remaining - 1);
+}
+if (fixture.waitForFile && configuration.jobs_dir.endsWith("-2"))
+  await waitForRelease(fixture.waitForFile);
 if (fixture.rewardByInstruction) {
   const instructions = await readFile(
     join(configuration.tasks[0].path, "environment", "AGENTS.md"),

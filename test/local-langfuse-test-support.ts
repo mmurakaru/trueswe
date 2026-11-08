@@ -6,14 +6,24 @@ export async function startLocalLangfuseFixture(): Promise<{
   baseUrl: string;
   traceRequests: () => number;
   tracePayloads: () => string[];
+  scoreRequests: () => unknown[];
   close: () => Promise<void>;
   skillSelections: () => string[];
 }> {
   let traceRequests = 0;
   const tracePayloads: string[] = [];
+  const scoreRequests: unknown[] = [];
   const versions: Record<string, unknown>[] = [];
   const selections: string[] = [];
   const server = createServer(async (request, response) => {
+    if (request.url === "/api/public/scores" && request.method === "POST") {
+      const chunks: Buffer[] = [];
+      for await (const chunk of request) chunks.push(Buffer.from(chunk));
+      scoreRequests.push(JSON.parse(Buffer.concat(chunks).toString()));
+      response.writeHead(202, { "content-type": "application/json" });
+      response.end(JSON.stringify({ message: "Accepted" }));
+      return;
+    }
     if (request.url?.startsWith("/api/public/skills")) {
       const chunks: Buffer[] = [];
       for await (const chunk of request) chunks.push(Buffer.from(chunk));
@@ -91,6 +101,7 @@ export async function startLocalLangfuseFixture(): Promise<{
     baseUrl: `http://127.0.0.1:${address.port}`,
     traceRequests: () => traceRequests,
     tracePayloads: () => tracePayloads,
+    scoreRequests: () => scoreRequests,
     skillSelections: () => selections,
     close: () =>
       new Promise<void>((resolve, reject) =>

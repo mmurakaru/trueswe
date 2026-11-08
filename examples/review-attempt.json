@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "experimentConfigurationPath": "examples/codex-smoke.json",
+  "attemptIdentifier": "addition-codex-baseline-1",
+  "model": "jev-latest"
+}

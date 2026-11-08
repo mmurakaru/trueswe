@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "experimentConfigurationPath": "examples/codex-smoke.json",
+  "attemptIdentifier": "addition-codex-baseline-1",
+  "decision": "accept",
+  "category": "missing-context",
+  "evidenceReference": "trajectory",
+  "explanation": "Replace this text with the human reviewer's evidence-based explanation."
+}

@@ -44,6 +44,11 @@ async function readRuntimeIdentity(): Promise<FrozenExperimentInputs["runtime"]>
     fingerprintDirectory(join(root, "src")),
     readFile(join(root, "package-lock.json")),
   ]);
+  if (
+    process.env.TRUESWE_BEND_SOURCE_HASH &&
+    process.env.TRUESWE_BEND_SOURCE_HASH !== bendContentHash
+  )
+    throw new Error("Bend source changed after the command was compiled");
   return {
     nodeVersion: process.version,
     bendVersion: requireEnvironmentVariable("TRUESWE_BEND_VERSION"),

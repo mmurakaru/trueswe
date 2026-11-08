@@ -36,6 +36,11 @@ test("GitHub source artifact contains an executable versioned Bend application",
     ]);
     assert.equal(extraction.status, 0);
     const extractedRoot = join(temporaryDirectory, archiveName.replace(/\.tar\.gz$/, ""));
+    const dependencies = spawnSync("npm", ["ci", "--ignore-scripts"], {
+      cwd: extractedRoot,
+      encoding: "utf8",
+    });
+    assert.equal(dependencies.status, 0, dependencies.stderr);
     const execution = spawnSync(process.execPath, ["scripts/run-bend.ts", "--version"], {
       cwd: extractedRoot,
       encoding: "utf8",
