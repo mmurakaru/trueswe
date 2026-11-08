@@ -193,9 +193,9 @@ export async function executeHarborAttempt(
           ...(profile.name === "codex" ? { config: {} } : {}),
           ...(profile.name === "grok-build"
             ? {
-                background_wait_sec: Math.min(
-                  30,
-                  Math.floor(configuration.limits.attemptTimeoutSeconds / 10),
+                background_wait_sec: Math.max(
+                  1,
+                  Math.min(30, Math.floor(configuration.limits.attemptTimeoutSeconds / 10)),
                 ),
                 kill_leftover_processes: true,
               }

@@ -25,6 +25,7 @@ test("Grok runs alone or with both agents and rejects subscription profiles", as
     );
     const configuration = JSON.parse(await readFile("examples/grok-build-smoke.json", "utf8"));
     configuration.outputDirectory = join(directory, "grok");
+    configuration.limits.attemptTimeoutSeconds = 9;
     configuration.langfuse.baseUrl = langfuse.baseUrl;
     configuration.agents[0].authentication.keyEnvironment = "CUSTOM_GROK_AUTH";
     const configurationPath = join(directory, "configuration.json");
