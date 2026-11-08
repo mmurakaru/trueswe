@@ -24,7 +24,13 @@ await writeFile(
     .map(([name, value]) => `${name}=${JSON.stringify(value)}`)
     .join("\n") + "\n",
   { mode: 0o600, flag: "wx" },
-);
+).catch((error: unknown) => {
+  if (error instanceof Error && "code" in error && error.code === "EEXIST") {
+    console.error("Local .env already exists. Existing credentials are never overwritten.");
+    process.exit(1);
+  }
+  throw error;
+});
 console.log(
   "Created .env with local credentials and the Codex authentication-file reference. Existing credentials are never overwritten.",
 );

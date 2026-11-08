@@ -64,7 +64,7 @@ export const experimentConfigurationSchema = validation.strictObject({
   ),
   repetitions: validation.optional(positiveInteger, 3),
   limits: validation.strictObject({
-    attemptTimeoutSeconds: validation.pipe(positiveInteger, validation.maxValue(3000)),
+    attemptTimeoutSeconds: validation.pipe(positiveInteger, validation.maxValue(1100)),
     concurrency: positiveInteger,
   }),
   langfuse: validation.strictObject({
@@ -124,4 +124,47 @@ export async function writeExperimentRecord(path: string, value: ExperimentRecor
   const temporaryPath = `${path}.${process.pid}.tmp`;
   await writeFile(temporaryPath, JSON.stringify(value, null, 2) + "\n", { mode: 0o600 });
   await rename(temporaryPath, path);
+}
+
+const nullableNumber = validation.nullable(validation.number());
+const nullableText = validation.nullable(validation.string());
+const experimentRecordSchema = validation.object({
+  schemaVersion: validation.literal(1),
+  configurationHash: validation.string(),
+  configuration: experimentConfigurationSchema,
+  createdAt: validation.string(),
+  attempts: validation.array(
+    validation.object({
+      identifier: validation.string(),
+      ordinal: validation.number(),
+      taskIdentifier: validation.string(),
+      agentName: validation.string(),
+      variantName: validation.string(),
+      repetition: validation.number(),
+      state: validation.picklist([
+        "pending",
+        "running",
+        "completed",
+        "interrupted",
+        "execution-error",
+      ]),
+      outcome: validation.nullable(validation.picklist(["pass", "fail"])),
+      startedAt: nullableText,
+      finishedAt: nullableText,
+      durationSeconds: nullableNumber,
+      trajectoryPath: nullableText,
+      traceIdentifier: nullableText,
+      inputTokens: nullableNumber,
+      outputTokens: nullableNumber,
+      costDollars: nullableNumber,
+      error: nullableText,
+    }),
+  ),
+});
+
+export async function readExperimentRecord(path: string): Promise<ExperimentRecord> {
+  const record = validation.parse(experimentRecordSchema, JSON.parse(await readFile(path, "utf8")));
+  if (record.configurationHash !== hashExperimentContent(JSON.stringify(record.configuration)))
+    throw new Error("Stored experiment configuration changed");
+  return record;
 }

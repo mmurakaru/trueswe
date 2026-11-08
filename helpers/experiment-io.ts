@@ -1,10 +1,11 @@
-import { access, readFile } from "node:fs/promises";
+import { access } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
   readExperimentConfiguration,
   hashExperimentContent,
   experimentRecordPath,
   writeExperimentRecord,
+  readExperimentRecord,
 } from "./experiment-record.ts";
 import type { ExperimentRecord, AttemptRecord } from "./experiment-record.ts";
 import { checkLocalLangfuse, recordLangfuseAttempt } from "./local-langfuse.ts";
@@ -66,9 +67,7 @@ export async function executeExperimentOrdinal(
   ordinal: number,
 ): Promise<number> {
   const configuration = await readExperimentConfiguration(configurationPath);
-  const record: ExperimentRecord = JSON.parse(
-    await readFile(experimentRecordPath(configuration), "utf8"),
-  );
+  const record = await readExperimentRecord(experimentRecordPath(configuration));
   if (record.configurationHash !== hashExperimentContent(JSON.stringify(configuration)))
     throw new Error("Frozen experiment configuration changed");
   const attempt = record.attempts[ordinal];
@@ -89,9 +88,7 @@ export async function finalizeExperimentOrdinal(
   )
     throw new Error("Invalid Bend attempt decision");
   const configuration = await readExperimentConfiguration(configurationPath);
-  const record: ExperimentRecord = JSON.parse(
-    await readFile(experimentRecordPath(configuration), "utf8"),
-  );
+  const record = await readExperimentRecord(experimentRecordPath(configuration));
   const attempt = record.attempts[ordinal];
   if (!attempt || attempt.state !== "running")
     throw new Error("Attempt has no pending verification decision");

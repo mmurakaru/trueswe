@@ -10,7 +10,7 @@ export function requireEnvironmentVariable(name: string): string {
   return value;
 }
 
-export function localLangfuseClient(configuration: ExperimentConfiguration): LangfuseClient {
+function localLangfuseAddress(configuration: ExperimentConfiguration): string {
   const address = new URL(configuration.langfuse.baseUrl);
   if (address.username || address.password || address.search || address.hash)
     throw new Error("Langfuse address must not include credentials, a query, or a fragment");
@@ -19,8 +19,12 @@ export function localLangfuseClient(configuration: ExperimentConfiguration): Lan
     !["http:", "https:"].includes(address.protocol)
   )
     throw new Error("Langfuse must use a local loopback address");
+  return address.href;
+}
+
+export function localLangfuseClient(configuration: ExperimentConfiguration): LangfuseClient {
   return new LangfuseClient({
-    baseUrl: address.href,
+    baseUrl: localLangfuseAddress(configuration),
     publicKey: requireEnvironmentVariable("LANGFUSE_PUBLIC_KEY"),
     secretKey: requireEnvironmentVariable("LANGFUSE_SECRET_KEY"),
     timeout: 10,
@@ -38,9 +42,8 @@ export async function recordLangfuseAttempt(
   configuration: ExperimentConfiguration,
   attempt: AttemptRecord,
 ): Promise<string> {
-  localLangfuseClient(configuration);
   const processor = new LangfuseSpanProcessor({
-    baseUrl: configuration.langfuse.baseUrl,
+    baseUrl: localLangfuseAddress(configuration),
     publicKey: requireEnvironmentVariable("LANGFUSE_PUBLIC_KEY"),
     secretKey: requireEnvironmentVariable("LANGFUSE_SECRET_KEY"),
     flushAt: 1,
