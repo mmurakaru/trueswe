@@ -159,7 +159,7 @@ The release must produce correct comparisons even when the candidate does not im
 
 ## Quality and releases
 
-Adapt cueloop's oxlint and Changesets approach to this repository's smaller scope.
+Use oxlint and Changesets for the repository's quality checks and release workflow.
 Use strict TypeScript checks, oxlint, formatting, meaningful tests, and Bend validation in local commands and CI.
 Verify versions of dependencies and GitHub Actions against their official registries or upstream releases before pinning.
 Keep package manifests private and provide no npm publish command or workflow.

@@ -1,7 +1,8 @@
 import Base
+import ./attempt-policy.bend as Attempt
 
 def print_help() -> IO(Unit):
-  IO.print("TrueSWE\n\nUsage: trueswe --help | --version\n\nLocal coding-agent experiments with verified task outcomes.")
+  IO.print("TrueSWE\n\nUsage: trueswe --help | --version | plan CONFIG | run CONFIG\n\nLocal coding-agent experiments with verified task outcomes.")
 
 def finish_helper(result: U32 & (String & String)) -> IO(Unit):
   (status, (output, errors)) = result
@@ -10,11 +11,77 @@ def finish_helper(result: U32 & (String & String)) -> IO(Unit):
     IO.print_err(errors)
     IO.exit(status)
 
-def run_helper(arguments: List<String>) -> IO(Unit):
-  do IO<Unit>:
+def invoke_helper(arguments: List<String>) -> IO(U32 & (String & String)):
+  do IO<U32 & (String & String)>:
     root : String <- IO.try(String, IO.get_env("TRUESWE_ROOT"))
     result : U32 & (String & String) <- IO.try(U32 & (String & String), Process.run("node", (root ++ "helpers/command-io.ts") <> arguments, "", 1048576, 3600000))
+    return result
+
+def run_helper(arguments: List<String>) -> IO(Unit):
+  do IO<Unit>:
+    result : U32 & (String & String) <- invoke_helper(arguments)
     finish_helper(result)
+
+def helper_output(result: U32 & (String & String)) -> IO(String):
+  match result:
+    case (0, (output, errors)):
+      do IO<String>:
+        IO.print_err(errors)
+        return output
+    case (status, (_, errors)):
+      IO.die(String, status, errors)
+
+def persist_decision(values: String & String, configuration: String, ordinal: U32) -> IO(Unit):
+  (state, outcome) = values
+  do IO<Unit>:
+    result : U32 & (String & String) <- invoke_helper(["finalize", configuration, U32.show(ordinal), state, outcome])
+    output : String <- helper_output(result)
+    return Unit{}
+
+def finalize_attempt(evidence: Maybe<&2, U32>, configuration: String, ordinal: U32) -> IO(Unit):
+  match evidence:
+    case None{}:
+      IO.die(Unit, 1, "Integration helper returned invalid verification evidence")
+    case Some{code}:
+      persist_decision(Attempt.attempt_record_values(Attempt.decide_attempt(code)), configuration, ordinal)
+
+def execute_attempts(remaining: Nat, +ordinal: U32, +configuration: String) -> IO(Unit):
+  match remaining:
+    case 0n:
+      IO.print("Experiment finished.")
+    case 1n+rest:
+      do IO<Unit>:
+        result : U32 & (String & String) <- invoke_helper(["attempt", configuration, U32.show(ordinal)])
+        output : String <- helper_output(result)
+        finalize_attempt(U32.read(output), configuration, ordinal)
+        execute_attempts(rest, (ordinal + 1 : U32), configuration)
+
+def execute_prepared(count: Maybe<&2, U32>, configuration: String) -> IO(Unit):
+  match count:
+    case None{}:
+      IO.die(Unit, 1, "Integration helper returned an invalid attempt count")
+    case Some{number}:
+      execute_attempts(U32.to_nat(number), 0, configuration)
+
+def run_experiment(+configuration: String) -> IO(Unit):
+  do IO<Unit>:
+    result : U32 & (String & String) <- invoke_helper(["prepare", configuration])
+    count : String <- helper_output(result)
+    execute_prepared(U32.read(count), configuration)
+
+def route_plan(is_plan: Bool, configuration: String) -> IO(Unit):
+  match is_plan:
+    case True{}:
+      run_helper(["plan", configuration])
+    case False{}:
+      IO.die(Unit, 2, "Unknown command. Use --help.")
+
+def route_run(is_run: Bool, command: String, configuration: String) -> IO(Unit):
+  match is_run:
+    case True{}:
+      run_experiment(configuration)
+    case False{}:
+      route_plan(String.eq(command, "plan"), configuration)
 
 def route_version(is_version: Bool) -> IO(Unit):
   match is_version:
@@ -38,7 +105,9 @@ def route_arguments(arguments: List<String>) -> IO(Unit):
       print_help()
     case Con{_, Con{+command, Nil{}}}:
       route_help(String.eq(command, "--help"), command)
-    case Con{_, Con{_, Con{_, _}}}:
+    case Con{_, Con{+command, Con{configuration, Nil{}}}}:
+      route_run(String.eq(command, "run"), command, configuration)
+    case Con{_, Con{_, Con{_, Con{_, _}}}}:
       IO.die(Unit, 2, "Unexpected arguments. Use --help.")
 
 def main() -> IO(Unit):

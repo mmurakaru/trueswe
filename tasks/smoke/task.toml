@@ -1,0 +1,23 @@
+schema_version = "1.4"
+artifacts = ["/app/add.mjs"]
+
+[task]
+name = "trueswe/addition-smoke"
+version = "1.0.0"
+keywords = ["javascript", "arithmetic", "deterministic"]
+
+[agent]
+timeout_sec = 300
+
+[verifier]
+timeout_sec = 30
+environment_mode = "separate"
+
+[verifier.environment]
+cpus = 1
+memory_mb = 512
+
+[environment]
+cpus = 1
+memory_mb = 2048
+storage_mb = 4096

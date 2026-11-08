@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "name": "codex-smoke",
+  "outputDirectory": "results/codex-smoke",
+  "tasks": [{ "identifier": "addition", "path": "tasks/smoke", "split": "development" }],
+  "agents": [
+    {
+      "name": "codex",
+      "model": "openai/gpt-6.1-sol",
+      "version": "0.167.0",
+      "reasoningEffort": "medium",
+      "authentication": {
+        "method": "subscription",
+        "credentialPathEnvironment": "TRUESWE_CODEX_AUTH_FILE"
+      }
+    }
+  ],
+  "variants": [{ "name": "baseline", "instructionsPath": "examples/baseline-instructions.md" }],
+  "repetitions": 1,
+  "limits": { "attemptTimeoutSeconds": 300, "concurrency": 1 },
+  "langfuse": { "baseUrl": "http://127.0.0.1:3035", "projectIdentifier": "trueswe" }
+}

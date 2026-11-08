@@ -13,4 +13,6 @@ For Jev requests, read [skills/typesafe-ai/SKILL.md](skills/typesafe-ai/SKILL.md
 
 Tests exercise the CLI and recorded experiment outcomes across external-tool boundaries.
 Keep credentials in environment variables or files referenced by the profile.
+Keep public documentation, examples, and issue descriptions generic.
+Keep private source references, local paths, credentials, and live run identifiers out of commits and public issue or PR text.
 Comments contain one line of non-obvious intent.
