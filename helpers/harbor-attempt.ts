@@ -155,7 +155,7 @@ export async function executeHarborAttempt(
     await writeFile(
       dockerfilePath,
       (await readFile(dockerfilePath, "utf8")) +
-        "\nRUN rm -f /app/CLAUDE.md /app/Claude.md /app/CLAUDE.local.md /app/Agents.md /app/AGENT.md /app/.mcp.json /app/.grok/config.toml && rm -rf /app/.claude/rules /app/.grok/hooks /app/.grok/plugins\n",
+        "\nRUN rm -f /app/CLAUDE.md /app/Claude.md /app/CLAUDE.local.md /app/Agents.md /app/AGENT.md /app/.mcp.json /app/.claude.json /app/.cursor/mcp.json\n",
     );
   }
   await stageAttemptSkills(record, attempt, taskPath);

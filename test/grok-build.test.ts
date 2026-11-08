@@ -62,7 +62,7 @@ test("Grok runs alone or with both agents and rejects subscription profiles", as
     );
     assert.match(
       await readFile(join(attemptDirectory, "task/environment/Dockerfile"), "utf8"),
-      /rm -f.*Claude.md.*config.toml/,
+      /rm -f.*Claude.md.*mcp.json/,
     );
     const codex = JSON.parse(await readFile("examples/codex-smoke.json", "utf8"));
     const claude = JSON.parse(await readFile("examples/claude-code-smoke.json", "utf8"));

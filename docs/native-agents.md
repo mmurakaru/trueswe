@@ -40,5 +40,6 @@ TrueSWE bounds background waiting and asks the adapter to terminate leftover pro
 
 Grok reads the selected root `AGENTS.md`.
 TrueSWE removes alternate root instruction names and project MCP, plugin, hook, and local configuration files from the staged environment.
+The shared staging step clears project agent metadata on every attempt, including a baseline with no selected skills.
 Native skill discovery uses the selected experiment bundles.
 The [official instruction and skill discovery rules](https://docs.x.ai/build/features/skills-plugins-marketplaces) define these paths.
