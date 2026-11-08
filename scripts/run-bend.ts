@@ -70,6 +70,7 @@ async function launchNative(nativeArguments: string[], forwardSignals: boolean):
       detached: true,
     });
     let killTimer: NodeJS.Timeout | undefined;
+    const escalation = Promise.withResolvers<void>();
     const stop = (signal: NodeJS.Signals) => {
       receivedSignal = signal;
       if (!child.pid) return;
@@ -82,8 +83,9 @@ async function launchNative(nativeArguments: string[], forwardSignals: boolean):
         try {
           process.kill(-child.pid!, "SIGKILL");
         } catch {
-          return;
+          /* The native process group has exited. */
         }
+        escalation.resolve();
       }, 8000);
     };
     const interrupt = () => stop("SIGINT");
@@ -101,7 +103,8 @@ async function launchNative(nativeArguments: string[], forwardSignals: boolean):
       cleanup();
       reject(error);
     });
-    child.once("close", (status) => {
+    child.once("close", async (status) => {
+      if (killTimer) await escalation.promise;
       cleanup();
       complete(status ?? 1);
     });

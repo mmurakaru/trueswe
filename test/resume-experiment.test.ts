@@ -75,6 +75,26 @@ test("explicit resume preserves verified passes and failures, retries unfinished
     assert.ok(stopped.attempts[2]?.trajectoryPath);
     const trajectory = await readFile(stopped.attempts[2]!.trajectoryPath!, "utf8");
     assert.match(trajectory, /Work before interruption/);
+    const requestPath = join(directory, "review.json");
+    await writeFile(
+      requestPath,
+      JSON.stringify({
+        schemaVersion: 1,
+        experimentConfigurationPath: configurationPath,
+        attemptIdentifier: stopped.attempts[2]!.identifier,
+        model: "jev-fixture",
+        keyEnvironment: "RESUME_REVIEW_TEST_KEY",
+      }),
+    );
+    const originalReviewPath = join(
+      configuration.outputDirectory,
+      "reviews",
+      stopped.attempts[2]!.identifier + ".json",
+    );
+    const reviewEnvironment = { ...environment, RESUME_REVIEW_TEST_KEY: "" };
+    const firstReview = await launchExperimentCommand(["review", requestPath], reviewEnvironment);
+    assert.equal(firstReview.status, 0, firstReview.output);
+    const originalReviewBytes = await readFile(originalReviewPath, "utf8");
     fixture.pauseOnRepetition = 0;
     await writeFile(helper + ".result.json", JSON.stringify(fixture));
     const resumed = await launchExperimentCommand(["resume", configurationPath], environment);
@@ -95,6 +115,19 @@ test("explicit resume preserves verified passes and failures, retries unfinished
       await readFile(join(configuration.outputDirectory, "report.md"), "utf8"),
       /Previous execution 1: interrupted/,
     );
+    const retriedReview = await launchExperimentCommand(["review", requestPath], reviewEnvironment);
+    assert.equal(retriedReview.status, 0, retriedReview.output);
+    const scoreRows = langfuse.scoreRequests().flat() as {
+      metadata: { localReview: string; executionNumber: number };
+    }[];
+    assert.ok(
+      scoreRows.some(
+        (score) =>
+          score.metadata.executionNumber === 2 &&
+          score.metadata.localReview.endsWith("-retry-2.json"),
+      ),
+    );
+    assert.equal(await readFile(originalReviewPath, "utf8"), originalReviewBytes);
     const reportBytes = await readFile(join(configuration.outputDirectory, "report.md"), "utf8");
     const traces = langfuse.traceRequests();
     const repeated = await launchExperimentCommand(["resume", configurationPath], environment);

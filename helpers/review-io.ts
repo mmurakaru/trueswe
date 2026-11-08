@@ -1,5 +1,6 @@
 import { withFileRecordLock } from "./file-record-lock.ts";
 import { readFile } from "node:fs/promises";
+import { relative, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import * as validation from "valibot";
 import {
@@ -178,7 +179,8 @@ export async function finalizeAttemptReview(
                 status: judgment.status,
                 confidence: judgment.confidence,
                 model: judgment.modelIdentity,
-                localReview: `reviews/${request.attemptIdentifier}.json`,
+                localReview: relative(resolve(context.configuration.outputDirectory), context.path),
+                executionNumber: context.attempt.executionNumber,
               },
             },
           ],
@@ -265,7 +267,8 @@ export async function recordHumanLabel(requestPath: string, status: string): Pro
                 status: decision.status,
                 evidenceReference: decision.evidenceReference,
                 confirmedAt: decision.confirmedAt,
-                localReview: `reviews/${request.attemptIdentifier}.json`,
+                localReview: relative(resolve(context.configuration.outputDirectory), context.path),
+                executionNumber: context.attempt.executionNumber,
               },
             },
           ],

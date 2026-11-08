@@ -47,10 +47,14 @@ export async function runExternalProcess(
       }
     };
     let killTimer: NodeJS.Timeout | undefined;
+    const escalation = Promise.withResolvers<void>();
     const stop = () => {
       timedOut = true;
       terminate();
-      killTimer ??= setTimeout(forceTerminate, 2000);
+      killTimer ??= setTimeout(() => {
+        forceTerminate();
+        escalation.resolve();
+      }, 2000);
     };
     const timer = setTimeout(stop, timeoutMilliseconds);
     const onSignal = () => {
@@ -91,6 +95,7 @@ export async function runExternalProcess(
       reject(error);
     });
     child.once("close", async (status) => {
+      if (killTimer) await escalation.promise;
       cleanup();
       await ownership;
       if (ownershipError) {
