@@ -1,6 +1,6 @@
 # Human review
 
-Use `npm start -- review examples/review-attempt.json` to request a review suggestion for a recorded terminal attempt.
+Use `pnpm start review examples/review-attempt.json` to request a review suggestion for a recorded terminal attempt.
 The request names a Jev model and uses `TYPESAFE_API_KEY` by default.
 Set `keyEnvironment` to reference a different environment variable.
 The local record preserves the requested model, returned model identity, question, bounded evidence, confidence, and probabilities.
@@ -11,9 +11,9 @@ Every suggestion remains unconfirmed until a human records a decision.
 Jev does not select agents or change verifier outcomes.
 A nonzero tool result alone is not a confirmed harmful error.
 
-Use `npm start -- reviews examples/codex-smoke.json` to list suggestions and decision histories.
+Use `pnpm start reviews examples/codex-smoke.json` to list suggestions and decision histories.
 Inspect the trajectory before recording a label.
-Use `npm start -- label examples/label-attempt.json` only after a human has accepted, changed, or rejected the category.
+Use `pnpm start label examples/label-attempt.json` only after a human has accepted, changed, or rejected the category.
 The label request needs a recorded evidence reference and an explanation.
 Accepted and changed decisions need a category.
 Rejected decisions create no accepted category.

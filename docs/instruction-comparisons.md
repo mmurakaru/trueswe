@@ -11,8 +11,8 @@ The concurrency value is an upper limit.
 The Bend runner executes attempts sequentially in this release.
 
 ```sh
-npm start -- plan examples/instruction-comparison.json
-npm start -- run examples/instruction-comparison.json
+pnpm start plan examples/instruction-comparison.json
+pnpm start run examples/instruction-comparison.json
 ```
 
 The plan displays the attempt count and limits before execution.

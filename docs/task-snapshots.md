@@ -1,6 +1,6 @@
 # Task snapshots
 
-Use `npm start -- snapshot REQUEST.json` to freeze a GitHub issue, repository commit, and Harbor task template.
+Use `pnpm start snapshot REQUEST.json` to freeze a GitHub issue, repository commit, and Harbor task template.
 Store request files and snapshots under the ignored `results/` directory when they contain private inputs.
 
 A request contains:

@@ -1,6 +1,6 @@
 # Managed skills
 
-Run `npm start -- publish-skill examples/publish-bend-skill.json` to publish a Git skill directory to local Langfuse.
+Run `pnpm start publish-skill examples/publish-bend-skill.json` to publish a Git skill directory to local Langfuse.
 The result includes the skill name, immutable version, source revision, and source content hash.
 A source revision is recorded only when Git confirms that the skill directory is clean.
 Uncommitted or unversioned content has a null source revision and retains its content hash.

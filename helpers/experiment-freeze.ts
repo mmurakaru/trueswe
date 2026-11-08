@@ -42,7 +42,7 @@ async function readRuntimeIdentity(): Promise<FrozenExperimentInputs["runtime"]>
   const [helperContentHash, bendContentHash, packageLock] = await Promise.all([
     fingerprintDirectory(join(root, "helpers")),
     fingerprintDirectory(join(root, "src")),
-    readFile(join(root, "package-lock.json")),
+    readFile(join(root, "pnpm-lock.yaml")),
   ]);
   if (
     process.env.TRUESWE_BEND_SOURCE_HASH &&

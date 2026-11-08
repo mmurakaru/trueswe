@@ -37,7 +37,7 @@ test("GitHub source artifact contains an executable versioned Bend application",
     ]);
     assert.equal(extraction.status, 0);
     const extractedRoot = join(temporaryDirectory, archiveName.replace(/\.tar\.gz$/, ""));
-    const dependencies = spawnSync("npm", ["ci", "--ignore-scripts"], {
+    const dependencies = spawnSync("pnpm", ["install", "--frozen-lockfile", "--ignore-scripts"], {
       cwd: extractedRoot,
       encoding: "utf8",
     });
@@ -46,7 +46,7 @@ test("GitHub source artifact contains an executable versioned Bend application",
     assert.ok(Object.keys(template).includes("CLAUDE_CODE_OAUTH_TOKEN"));
     assert.ok(Object.values(template).every((value) => value === ""));
     assert.match(await readFile(join(extractedRoot, ".gitignore"), "utf8"), /^\.env$/m);
-    const setup = spawnSync("npm", ["run", "setup:env"], { cwd: extractedRoot, encoding: "utf8" });
+    const setup = spawnSync("pnpm", ["run", "setup:env"], { cwd: extractedRoot, encoding: "utf8" });
     assert.equal(setup.status, 0, setup.stderr);
     assert.equal(
       parseEnv(await readFile(join(extractedRoot, ".env"), "utf8")).CLAUDE_CODE_OAUTH_TOKEN,

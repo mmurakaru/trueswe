@@ -5,8 +5,8 @@ description: Write and validate TrueSWE Bend commands, experiment transitions, a
 
 Read the installed compiler's `bend guide` before changing Bend code.
 Use `bend base Name` to inspect the version's actual library declarations.
-The compiler is pinned in `tools/bend-release.json` and installed by `npm run setup`.
-Run `npm run check:bend` and exercise the changed command through `npm start --`.
+The compiler is pinned in `tools/bend-release.json` and installed by `pnpm run setup`.
+Run `pnpm run check:bend` and exercise the changed command through `pnpm start`.
 
 Bend functions terminate and variables are affine by default.
 Use explicit Data fields when copying state and match helpers when inspecting computed values.
