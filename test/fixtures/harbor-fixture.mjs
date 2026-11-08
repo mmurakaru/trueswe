@@ -7,6 +7,11 @@ if (process.argv.includes("--version")) {
 }
 const configurationPath = process.argv[process.argv.indexOf("--config") + 1];
 const configuration = JSON.parse(await readFile(configurationPath, "utf8"));
+if (
+  configuration.agents[0].name === "grok-build" &&
+  configuration.agents[0].kwargs.background_wait_sec < 1
+)
+  throw new Error("Grok background waiting must be positive");
 const fixture = JSON.parse(await readFile(process.argv[1] + ".result.json", "utf8"));
 for (const name of fixture.requiredEnvironmentNames ?? []) {
   if (!process.env[name]) throw new Error(`Required fixture environment is missing: ${name}`);

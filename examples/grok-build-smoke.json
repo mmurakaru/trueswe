@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "name": "grok-build-smoke",
+  "outputDirectory": "results/grok-build-smoke",
+  "tasks": [
+    {
+      "identifier": "addition",
+      "path": "tasks/smoke",
+      "split": "development"
+    }
+  ],
+  "agents": [
+    {
+      "name": "grok-build",
+      "model": "xai/grok-4.7",
+      "version": "1.0.77",
+      "reasoningEffort": "medium",
+      "authentication": {
+        "method": "api-key",
+        "keyEnvironment": "XAI_API_KEY"
+      }
+    }
+  ],
+  "variants": [
+    {
+      "name": "baseline",
+      "instructionsPath": "examples/baseline-instructions.md"
+    }
+  ],
+  "repetitions": 1,
+  "limits": {
+    "attemptTimeoutSeconds": 300,
+    "concurrency": 1
+  },
+  "langfuse": {
+    "baseUrl": "http://127.0.0.1:3035",
+    "projectIdentifier": "trueswe"
+  }
+}

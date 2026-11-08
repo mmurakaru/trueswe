@@ -151,6 +151,13 @@ export async function executeHarborAttempt(
         "\nRUN rm -f /app/CLAUDE.local.md /app/.claude/CLAUDE.md /app/.claude/settings.json /app/.claude/settings.local.json /app/.mcp.json && rm -rf /app/.claude/rules /app/.claude/commands /app/.claude/agents /app/.claude/output-styles\nCOPY CLAUDE.md /app/CLAUDE.md\n",
     );
   }
+  if (profile.name === "grok-build") {
+    await writeFile(
+      dockerfilePath,
+      (await readFile(dockerfilePath, "utf8")) +
+        "\nRUN rm -f /app/CLAUDE.md /app/Claude.md /app/CLAUDE.local.md /app/Agents.md /app/AGENT.md /app/.mcp.json /app/.claude.json /app/.cursor/mcp.json\n",
+    );
+  }
   await stageAttemptSkills(record, attempt, taskPath);
   const harborConfiguration = {
     job_name: "job",
@@ -184,6 +191,15 @@ export async function executeHarborAttempt(
           version: profile.version,
           reasoning_effort: profile.reasoningEffort,
           ...(profile.name === "codex" ? { config: {} } : {}),
+          ...(profile.name === "grok-build"
+            ? {
+                background_wait_sec: Math.max(
+                  1,
+                  Math.min(30, Math.floor(configuration.limits.attemptTimeoutSeconds / 10)),
+                ),
+                kill_leftover_processes: true,
+              }
+            : {}),
         },
       },
     ],
