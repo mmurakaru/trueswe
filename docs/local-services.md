@@ -5,14 +5,17 @@ Image digests follow the [official release deployment](https://github.com/langfu
 Only local loopback ports 3035 and 3036 are published.
 
 ```sh
-npm run services:configure
+npm run setup:env
 npm run services:up
 npm run setup:harbor
 npm start -- plan examples/codex-smoke.json
 npm start -- run examples/codex-smoke.json
 ```
 
-Configuration creates a private, ignored `.env` with generated local credentials.
+Run `npm run setup:env` to create a private, ignored `.env` with generated local service credentials and empty provider fields.
+Repeat the command to add missing fields while preserving existing values.
+The committed `.env.example` lists all fields without credentials.
+Put a Claude subscription token from `claude setup-token` in `CLAUDE_CODE_OAUTH_TOKEN` and select subscription authentication in the profile.
 It stores only the path to the existing Codex authentication file.
 The runner reads that path and lets Harbor's native adapter use it.
 The adapter temporarily makes the credentials available inside the agent sandbox.
