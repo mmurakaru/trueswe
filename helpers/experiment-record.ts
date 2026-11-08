@@ -13,6 +13,11 @@ const safeIdentifier = validation.pipe(
   validation.string(),
   validation.regex(/^[a-z][a-z0-9-]{0,63}$/),
 );
+export const managedSkillNameSchema = validation.pipe(
+  validation.string(),
+  validation.regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+  validation.maxLength(64),
+);
 const environmentReference = validation.pipe(
   validation.string(),
   validation.regex(/^[A-Z][A-Z0-9_]*$/),
@@ -27,10 +32,25 @@ const authenticationSchema = validation.variant("method", [
     keyEnvironment: environmentReference,
   }),
 ]);
+export const localLangfuseConnectionSchema = validation.strictObject({
+  baseUrl: validation.pipe(validation.string(), validation.url()),
+  projectIdentifier: validation.string(),
+});
+const managedSkillSelectionSchema = validation.union([
+  validation.strictObject({ name: managedSkillNameSchema, version: positiveInteger }),
+  validation.strictObject({
+    name: managedSkillNameSchema,
+    label: validation.pipe(validation.string(), validation.minLength(1)),
+  }),
+]);
 export const experimentConfigurationSchema = validation.strictObject({
   schemaVersion: validation.literal(1),
   name: safeIdentifier,
   outputDirectory: validation.string(),
+  comparisonKind: validation.optional(
+    validation.picklist(["instructions", "skills"]),
+    "instructions",
+  ),
   tasks: validation.pipe(
     validation.array(
       validation.strictObject({
@@ -58,7 +78,11 @@ export const experimentConfigurationSchema = validation.strictObject({
   ),
   variants: validation.pipe(
     validation.array(
-      validation.strictObject({ name: safeIdentifier, instructionsPath: validation.string() }),
+      validation.strictObject({
+        name: safeIdentifier,
+        instructionsPath: validation.string(),
+        skills: validation.optional(validation.array(managedSkillSelectionSchema), []),
+      }),
     ),
     validation.minLength(1),
     validation.maxLength(2),
@@ -68,10 +92,7 @@ export const experimentConfigurationSchema = validation.strictObject({
     attemptTimeoutSeconds: validation.pipe(positiveInteger, validation.maxValue(3000)),
     concurrency: positiveInteger,
   }),
-  langfuse: validation.strictObject({
-    baseUrl: validation.pipe(validation.string(), validation.url()),
-    projectIdentifier: validation.string(),
-  }),
+  langfuse: localLangfuseConnectionSchema,
 });
 export type ExperimentConfiguration = validation.InferOutput<typeof experimentConfigurationSchema>;
 export interface AttemptRecord {
@@ -93,6 +114,8 @@ export interface AttemptRecord {
   costDollars: number | null;
   error: string | null;
   exceptionType: string | null;
+  skillLoads: { name: string; version: number; path: string; eventReference: string }[];
+  skillLoadEvidence: "observed" | "unknown" | "not-supplied";
 }
 export interface ExperimentRecord {
   schemaVersion: 2;
@@ -113,6 +136,13 @@ export interface FrozenExperimentInputs {
     startingCommit: string | null;
   }[];
   variants: { name: string; instructionsHash: string; instructionsContent: string }[];
+  skills: {
+    variantName: string;
+    name: string;
+    version: number;
+    contentHash: string;
+    files: { path: string; sha256Hash: string }[];
+  }[];
   runtime: {
     nodeVersion: string;
     bendVersion: string;
@@ -196,6 +226,20 @@ const experimentRecordSchema = validation.object({
         instructionsContent: validation.string(),
       }),
     ),
+    skills: validation.optional(
+      validation.array(
+        validation.object({
+          variantName: validation.string(),
+          name: validation.string(),
+          version: validation.number(),
+          contentHash: validation.string(),
+          files: validation.array(
+            validation.object({ path: validation.string(), sha256Hash: validation.string() }),
+          ),
+        }),
+      ),
+      [],
+    ),
     runtime: validation.object({
       nodeVersion: validation.string(),
       bendVersion: validation.string(),
@@ -231,6 +275,21 @@ const experimentRecordSchema = validation.object({
       costDollars: nullableNumber,
       error: nullableText,
       exceptionType: validation.optional(nullableText, null),
+      skillLoads: validation.optional(
+        validation.array(
+          validation.object({
+            name: validation.string(),
+            version: validation.number(),
+            path: validation.string(),
+            eventReference: validation.string(),
+          }),
+        ),
+        [],
+      ),
+      skillLoadEvidence: validation.optional(
+        validation.picklist(["observed", "unknown", "not-supplied"]),
+        "unknown",
+      ),
     }),
   ),
 });

@@ -1,12 +1,61 @@
 import { createServer } from "node:http";
+import { createHash } from "node:crypto";
 
 export async function startLocalLangfuseFixture(): Promise<{
   baseUrl: string;
   traceRequests: () => number;
   close: () => Promise<void>;
+  skillSelections: () => string[];
 }> {
   let traceRequests = 0;
-  const server = createServer((request, response) => {
+  const versions: Record<string, unknown>[] = [];
+  const selections: string[] = [];
+  const server = createServer(async (request, response) => {
+    if (request.url?.startsWith("/api/public/skills")) {
+      const chunks: Buffer[] = [];
+      for await (const chunk of request) chunks.push(Buffer.from(chunk));
+      const url = new URL(request.url, "http://localhost");
+      response.writeHead(200, { "content-type": "application/json" });
+      if (request.method === "POST") {
+        const body: { files: { path: string; content: string }[] } = JSON.parse(
+          Buffer.concat(chunks).toString(),
+        );
+        const name = body.files
+          .find((file) => file.path === "SKILL.md")
+          ?.content.match(/^name: (.+)$/m)?.[1];
+        const version = {
+          id: `skill-${versions.length + 1}`,
+          name,
+          version: versions.length + 1,
+          description: "Fixture skill",
+          labels: ["benchmark"],
+          createdAt: new Date().toISOString(),
+          files: body.files.map((file, index) => ({
+            path: file.path,
+            content: file.content,
+            id: `file-${index}`,
+            blobId: `blob-${index}`,
+            sha256Hash: createHash("sha256").update(file.content).digest("base64"),
+            contentLength: Buffer.byteLength(file.content),
+            contentType: "text/plain",
+          })),
+        };
+        versions.push(version);
+        response.end(JSON.stringify(version));
+      } else if (request.method === "PATCH") {
+        response.end(JSON.stringify(versions.at(-1)));
+      } else {
+        selections.push(url.search);
+        response.end(
+          JSON.stringify(
+            versions.find(
+              (version) => version.version === Number(url.searchParams.get("version")),
+            ) ?? versions.at(-1),
+          ),
+        );
+      }
+      return;
+    }
     request.resume();
     if (request.method === "POST") {
       traceRequests += 1;
@@ -32,6 +81,7 @@ export async function startLocalLangfuseFixture(): Promise<{
   return {
     baseUrl: `http://127.0.0.1:${address.port}`,
     traceRequests: () => traceRequests,
+    skillSelections: () => selections,
     close: () =>
       new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),

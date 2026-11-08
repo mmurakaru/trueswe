@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "skillDirectory": "skills/bend",
+  "langfuse": { "baseUrl": "http://127.0.0.1:3035", "projectIdentifier": "trueswe" },
+  "labels": ["benchmark"],
+  "commitMessage": "Publish the Bend authoring skill"
+}

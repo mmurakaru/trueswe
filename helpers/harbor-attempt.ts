@@ -134,6 +134,7 @@ export async function executeHarborAttempt(
     dockerfilePath,
     (await readFile(dockerfilePath, "utf8")) + "\nCOPY AGENTS.md /app/AGENTS.md\n",
   );
+  await stageAttemptSkills(record, attempt, taskPath);
   const harborConfiguration = {
     job_name: "job",
     jobs_dir: attemptDirectory,
@@ -208,3 +209,4 @@ export async function executeHarborAttempt(
   await writeExperimentRecord(experimentRecordPath(configuration), record);
   return evidenceCode;
 }
+import { stageAttemptSkills } from "./skill-supply.ts";

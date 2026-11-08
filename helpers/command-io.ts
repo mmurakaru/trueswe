@@ -7,6 +7,12 @@ try {
       await readFile(new URL("../package.json", import.meta.url), "utf8"),
     );
     console.log(`trueswe ${manifest.version}`);
+  } else if (process.argv[2] === "publish-skill" && process.argv[3]) {
+    const { publishManagedSkill } = await import("./managed-skills.ts");
+    console.log(JSON.stringify(await publishManagedSkill(process.argv[3]), null, 2));
+  } else if (process.argv[2] === "comparison-facts" && process.argv[3]) {
+    const { readComparisonFacts } = await import("./experiment-io.ts");
+    process.stdout.write(String(await readComparisonFacts(process.argv[3])));
   } else if (process.argv[2] === "prepare" && process.argv[3]) {
     const { prepareExperiment } = await import("./experiment-io.ts");
     process.stdout.write(String(await prepareExperiment(process.argv[3])));

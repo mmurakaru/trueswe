@@ -12,6 +12,7 @@ import { verifyTaskSnapshot } from "./task-snapshot.ts";
 import { runExternalProcess } from "./child-process-io.ts";
 import { requireEnvironmentVariable } from "./local-langfuse.ts";
 import { harborProgramPath } from "./harbor-runtime.ts";
+import { freezeManagedSkills, frozenSkillDirectory } from "./managed-skills.ts";
 
 export function frozenTaskDirectory(
   configuration: ExperimentConfiguration,
@@ -105,7 +106,12 @@ export async function freezeExperimentInputs(
       };
     }),
   );
-  return { tasks, variants, runtime: await readRuntimeIdentity() };
+  return {
+    tasks,
+    variants,
+    skills: await freezeManagedSkills(configuration),
+    runtime: await readRuntimeIdentity(),
+  };
 }
 
 export async function verifyFrozenExperimentInputs(record: ExperimentRecord): Promise<void> {
@@ -153,4 +159,14 @@ export async function verifyFrozenExperimentInputs(record: ExperimentRecord): Pr
   );
   if (JSON.stringify(await readRuntimeIdentity()) !== JSON.stringify(record.frozenInputs.runtime))
     throw new Error("Frozen execution runtime changed");
+  await Promise.all(
+    record.frozenInputs.skills.map(async (skill) => {
+      if (
+        (await fingerprintDirectory(
+          frozenSkillDirectory(record.configuration, skill.variantName, skill.name),
+        )) !== skill.contentHash
+      )
+        throw new Error(`Frozen skill input changed: ${skill.name}`);
+    }),
+  );
 }
