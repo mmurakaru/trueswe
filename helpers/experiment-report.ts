@@ -3,6 +3,8 @@ import { resolve, relative } from "node:path";
 import type { ExperimentRecord } from "./experiment-record.ts";
 import { summarizeExperimentComparison } from "./comparison-summary.ts";
 import { experimentReviews } from "./review-record.ts";
+import { readExperimentRecord, experimentRecordPath } from "./experiment-record.ts";
+import { withFileRecordLock } from "./file-record-lock.ts";
 
 async function humanReviewReport(record: ExperimentRecord): Promise<string[]> {
   const reviews = await experimentReviews(record);
@@ -41,7 +43,7 @@ function skillLoadReport(attempt: ExperimentRecord["attempts"][number]): string[
   ];
 }
 
-export async function writeExperimentReport(record: ExperimentRecord): Promise<void> {
+async function writeExperimentReportSnapshot(record: ExperimentRecord): Promise<void> {
   const lines = [
     `# ${record.configuration.name}`,
     "",
@@ -122,4 +124,12 @@ export async function writeExperimentReport(record: ExperimentRecord): Promise<v
     resolve(record.configuration.outputDirectory, "report.md"),
     lines.join("\n") + "\n",
   );
+}
+
+export async function writeExperimentReport(record: ExperimentRecord): Promise<void> {
+  await withFileRecordLock(resolve(record.configuration.outputDirectory, "report.md"), async () => {
+    await writeExperimentReportSnapshot(
+      await readExperimentRecord(experimentRecordPath(record.configuration)),
+    );
+  });
 }

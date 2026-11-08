@@ -1,3 +1,4 @@
+import { withFileRecordLock } from "./file-record-lock.ts";
 import { readFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import * as validation from "valibot";
@@ -14,7 +15,6 @@ import {
   writeReviewRecord,
   reviewRecordPath,
   experimentReviews,
-  withReviewRecordLock,
 } from "./review-record.ts";
 import type { ReviewRecord } from "./review-record.ts";
 import { readReviewEvidence, registerCredentialFileValues } from "./review-evidence.ts";
@@ -101,7 +101,7 @@ export async function prepareAttemptReview(
     request.keyEnvironment,
     evidence.trajectoryAvailable,
   );
-  await withReviewRecordLock(context.path, async () => {
+  await withFileRecordLock(context.path, async () => {
     const review: ReviewRecord = (await existingReview(context)) ?? {
       schemaVersion: 1,
       experimentHash: context.record.configurationHash,
@@ -135,7 +135,7 @@ export async function finalizeAttemptReview(
     request.experimentConfigurationPath,
     request.attemptIdentifier,
   );
-  await withReviewRecordLock(context.path, async () => {
+  await withFileRecordLock(context.path, async () => {
     const review = await boundReview(context);
     const judgment = review.judgments.find((item) => item.identifier === identifier);
     if (!judgment) throw new Error("Review has no matching judgment");
@@ -210,7 +210,7 @@ export async function recordHumanLabel(requestPath: string, status: string): Pro
     request.experimentConfigurationPath,
     request.attemptIdentifier,
   );
-  await withReviewRecordLock(context.path, async () => {
+  await withFileRecordLock(context.path, async () => {
     const review = await boundReview(context);
     await registerCredentialFileValues(context.record);
     for (const judgment of review.judgments)

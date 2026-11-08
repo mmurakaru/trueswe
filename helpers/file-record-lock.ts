@@ -1,0 +1,18 @@
+import { mkdir } from "node:fs/promises";
+import { dirname } from "node:path";
+import { lock } from "proper-lockfile";
+
+export async function withFileRecordLock<T>(path: string, operation: () => Promise<T>): Promise<T> {
+  await mkdir(dirname(path), { recursive: true });
+  const release = await lock(path, {
+    realpath: false,
+    stale: 60_000,
+    update: 5000,
+    retries: { retries: 600, minTimeout: 25, maxTimeout: 100, factor: 1 },
+  });
+  try {
+    return await operation();
+  } finally {
+    await release();
+  }
+}
