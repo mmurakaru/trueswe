@@ -1,22 +1,33 @@
-# Resume an experiment
+# Resume and recovery
 
-Run `pnpm start resume CONFIG` to continue the matching frozen experiment.
-Completed passes and task failures remain unchanged.
+## Continue unfinished work
+
+```sh
+pnpm start resume CONFIG
+```
+
+Completed passes and task failures stay unchanged.
 Pending attempts run once.
-Running attempts first recover any complete independent verifier result from disk.
-Interrupted attempts and execution errors receive a new execution directory and retain their previous evidence.
-A failed task is a completed result and is not retried.
+A running attempt first recovers any complete independent verifier result on disk.
+Interrupted attempts and execution errors retain their evidence and get a new execution directory.
 
-The runner checks the configuration, task snapshots, instructions, selected skills, and runtime identities before resume.
-Changed inputs require a separate experiment.
-Only one run, resume, or recovery command can write the experiment at a time.
+> [!NOTE]
+> Resume requires the same frozen configuration, tasks, instructions, skills, and runtime identities.
+> Changed inputs require a separate experiment.
+> A completed task failure is not retried.
 
-Interrupt with Ctrl+C or SIGTERM to preserve evidence and stop the owned Harbor process group.
-Recovery removes containers selected by the execution's Compose working directories and networks selected by its recorded trial identity.
-It preserves available agent logs before removing containers.
-Cleanup warnings remain visible in the report.
+Only one run, resume, or recovery command can write an experiment at a time.
+Repeated resume of a completed experiment preserves its records and avoids duplicate trace exports.
+Retries retain the logical attempt's Langfuse identity and record separate execution and review histories.
 
-Run `pnpm start recover CONFIG` to recover local results without starting another model attempt.
-A completed experiment can be resumed repeatedly without rewriting results or exporting duplicate traces.
-Previous executions and human reviews remain recorded separately.
-A resumed logical attempt retains its Langfuse trace identity.
+## Stop or recover
+
+Interrupt with Ctrl+C or SIGTERM.
+The runner stops the owned Harbor process group, preserves available logs, and removes task resources selected by execution ownership.
+Cleanup warnings remain in the report.
+
+To recover local results without another model attempt:
+
+```sh
+pnpm start recover CONFIG
+```

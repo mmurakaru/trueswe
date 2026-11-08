@@ -1,7 +1,15 @@
 # Task snapshots
 
-Use `pnpm start snapshot REQUEST.json` to freeze a GitHub issue, repository commit, and Harbor task template.
-Store request files and snapshots under the ignored `results/` directory when they contain private inputs.
+Freeze a GitHub issue, source commit, and Harbor task template.
+
+## Create a snapshot
+
+```sh
+pnpm start snapshot REQUEST.json
+```
+
+> [!NOTE]
+> Keep private requests and snapshots under the ignored `results/` directory.
 
 A request contains:
 
@@ -21,6 +29,8 @@ A request contains:
 }
 ```
 
+## Validate inputs
+
 Replace the example commit with a full commit identifier.
 Each prerequisite commit must be an ancestor of the starting commit.
 The working directory may have unrelated edits; the snapshot contains only the chosen commit's tracked files.
@@ -33,6 +43,8 @@ Task authors verify that the reference solution passes and unchanged code fails.
 The snapshot records issue text and discussion, source hashes, task and verifier content hashes, split membership, and prior evaluation exposure.
 An existing snapshot is never overwritten.
 Use a new output directory to capture changed inputs.
+
+## Run
 
 To run a snapshot, set the experiment task path to its `task` subdirectory and its identifier and split to the snapshot metadata.
 The runner verifies the snapshot before starting an attempt.

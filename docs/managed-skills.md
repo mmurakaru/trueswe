@@ -1,37 +1,47 @@
 # Managed skills
 
-Run `pnpm start publish-skill examples/publish-bend-skill.json` to publish a Git skill directory to local Langfuse.
-The result includes the skill name, immutable version, source revision, and source content hash.
-A source revision is recorded only when Git confirms that the skill directory is clean.
-Uncommitted or unversioned content has a null source revision and retains its content hash.
-The content hash is the same in publication output and the frozen record.
-A separate directory hash verifies local files and permission bits.
-Labels select a version at experiment preparation.
-The experiment stores that version and a complete local copy for every later attempt.
+Keep source bundles in Git and publish supported text bundles to local Langfuse.
 
-Set `comparisonKind` to `skills` and use the same instructions for both variants.
-Each variant accepts `skills` entries with a `name` and either a positive `version` or a `label`.
-For example, a baseline can have `skills: []` and a candidate can have `skills: [{ "name": "bend", "version": 1 }]`.
-Instruction comparisons must supply the same resolved skill versions to both variants.
+## Publish and pin
 
-Langfuse 4.76.0 supports text bundles with at most 200 files and 1,000,000 UTF-8 bytes.
-TrueSWE validates the complete bundle against the server file format before publication.
-Unsupported files, binary data, symbolic links, and empty directories cause an error.
-Relative Markdown resource links must resolve to files inside the bundle.
-Use external URLs for repository resources that are outside the bundle.
-Langfuse does not store executable permission bits.
-Publication rejects executable source files; invoke scripts through an explicit interpreter and keep their source files non-executable.
-Files are never dropped or renamed to fit the service.
-An extensionless `LICENSE` file or a `.bend` source file is not supported by this server version.
-Keep such bundles in Git until Langfuse supports their complete contents.
+```sh
+pnpm start publish-skill examples/publish-bend-skill.json
+```
 
-TrueSWE supplies each selected bundle to the native project skill directory and verifies file checksums during image construction.
-Harbor also receives the frozen source paths and records their digests in its job lockfile.
-The report records supply, native catalog exposure, and observed file loads separately.
-Native catalog exposure remains unknown without evidence from the agent.
-A load requires a matched successful file read whose content matches the pinned file.
-Missing success metadata, formatted output, shell command mentions, and incomplete logs leave load evidence unknown.
-An observed file read does not prove that the agent followed the instructions.
+Publication returns the name, immutable version, content hash, and source revision.
+The revision is null for dirty or unversioned content.
+A separate directory hash checks local files and permissions.
 
-The file format comes from [Langfuse 4.76.0](https://github.com/langfuse/langfuse/blob/v4.76.0/packages/shared/src/features/skills/types.ts).
-Read evidence follows the [Harbor 0.25.0 Claude serializer](https://github.com/harbor-framework/harbor/blob/v0.25.0/src/harbor/agents/installed/claude_code.py).
+Set `comparisonKind` to `skills` and keep instructions identical between variants.
+Each skill entry selects a name and an exact version or label:
+
+```json
+"skills": [{ "name": "bend", "version": 1 }]
+```
+
+A baseline can use `"skills": []`.
+Preparation resolves labels once and freezes a complete copy for later attempts.
+Instruction comparisons require identical resolved skill versions in both variants.
+
+## Bundle limits
+
+[Langfuse 4.76.0](https://github.com/langfuse/langfuse/blob/v4.76.0/packages/shared/src/features/skills/types.ts) accepts at most 200 files and 1,000,000 UTF-8 bytes per version.
+TrueSWE checks complete bundles, supported extensions, and relative resource links before publication.
+Binary files, symbolic links, empty directories, executable files, and broken links produce an error.
+Use an explicit interpreter for non-executable script sources and external URLs for resources outside the bundle.
+
+> [!NOTE]
+> This server format excludes `.bend` and extensionless files such as `LICENSE`.
+> Keep unsupported bundles in Git.
+> TrueSWE preserves complete bundles and rejects unsupported contents without dropping or renaming files.
+
+## Read the evidence
+
+Selected bundles enter each native project skill directory with checksum validation.
+Harbor records their digests in its job lockfile.
+Reports distinguish supply, native catalog exposure, and observed reads.
+
+An observed load requires a matched successful file read with the pinned content.
+Missing success metadata, formatted output, shell mentions, or incomplete logs leave the result unknown.
+A read proves access, not that the agent followed the skill.
+See the [pinned Claude serializer](https://github.com/harbor-framework/harbor/blob/v0.25.0/src/harbor/agents/installed/claude_code.py) for native read evidence.

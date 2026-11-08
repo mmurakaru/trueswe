@@ -1,13 +1,14 @@
 # Skill sources
 
-`skills/typesafe-ai` is copied from `typesafe-ai/skills` at `302eea662c54bca6730873fe245bec1d69ebc23d`.
-Its MIT license is included in the directory.
+## Vendor bundles
 
-`skills/create-task` is copied from `harbor-framework/harbor` at `9c7a39b991d7e2205019f6be0598cbd22d84bfc3`.
-The upstream Apache-2.0 license is included in the directory.
+- [`skills/typesafe-ai`](../skills/typesafe-ai): [TypeSafe skills](https://github.com/typesafe-ai/skills) at `302eea662c54bca6730873fe245bec1d69ebc23d`, with its MIT license.
+- [`skills/create-task`](../skills/create-task): [Harbor](https://github.com/harbor-framework/harbor) at `9c7a39b991d7e2205019f6be0598cbd22d84bfc3`, with its Apache-2.0 license.
 
-`skills/bend` is a repository skill based on Bend 2.0.40's official guide.
-The inspected official Bend tree has no skill file.
+Preserve complete support files and licenses when updating vendor bundles.
+Record the exact upstream revision.
 
-Refresh copied skills deliberately and record the exact upstream revision with the update.
-Preserve support files and licenses.
+## Bend
+
+[`skills/bend`](../skills/bend) is authored in this repository from the official Bend 2.0.40 guide.
+The inspected upstream tree contains no official skill file.
