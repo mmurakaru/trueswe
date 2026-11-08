@@ -43,6 +43,19 @@ test("managed skill CLI publishes complete bundles, pins selectors and rejects m
     assert.notEqual(unsupported.status, 0);
     assert.match(unsupported.output, /unsupported.*LICENSE/);
     await rm(join(skillDirectory, "LICENSE"));
+    await writeFile(
+      join(skillDirectory, "SKILL.md"),
+      source + "[Required guide](references/missing.md)\n",
+    );
+    const missing = await launchExperimentCommand(["publish-skill", requestPath], environment);
+    assert.notEqual(missing.status, 0);
+    assert.match(missing.output, /support file is missing/);
+    await writeFile(join(skillDirectory, "SKILL.md"), source);
+    await writeFile(join(skillDirectory, "run.sh"), "#!/bin/sh\necho skill\n", { mode: 0o755 });
+    const executable = await launchExperimentCommand(["publish-skill", requestPath], environment);
+    assert.notEqual(executable.status, 0);
+    assert.match(executable.output, /cannot preserve executable permissions/);
+    await rm(join(skillDirectory, "run.sh"));
     const helper = join(directory, "harbor-fixture");
     await cp("test/fixtures/harbor-fixture.mjs", helper);
     await chmod(helper, 0o700);
@@ -53,6 +66,29 @@ test("managed skill CLI publishes complete bundles, pins selectors and rejects m
         verifier_environment_mode: "separate",
         verifier_result: { rewards: { reward: 1 } },
         agent_result: null,
+        trajectory: {
+          steps: [
+            {
+              step_id: 1,
+              tool_calls: [
+                {
+                  tool_call_id: "read-1",
+                  function_name: "Read",
+                  arguments: { file_path: "/app/.agents/skills/test-skill/SKILL.md" },
+                },
+              ],
+              observation: {
+                results: [
+                  {
+                    source_call_id: "read-1",
+                    content: source,
+                    extra: { tool_result_is_error: false },
+                  },
+                ],
+              },
+            },
+          ],
+        },
       }),
     );
     environment.TRUESWE_HARBOR = helper;
@@ -79,7 +115,11 @@ test("managed skill CLI publishes complete bundles, pins selectors and rejects m
     assert.equal(record.frozenInputs.skills[0]?.version, 1);
     assert.equal(record.frozenInputs.skills[0]?.files.length, 2);
     assert.equal(record.attempts[0]?.skillLoadEvidence, "not-supplied");
-    assert.equal(record.attempts[1]?.skillLoadEvidence, "unknown");
+    assert.equal(record.attempts[1]?.skillLoadEvidence, "observed");
+    const exported = langfuse.tracePayloads().join("\n");
+    assert.match(exported, /langfuse\.observation\.skills_available/);
+    assert.match(exported, /skillName/);
+    assert.match(exported, /skill_read/);
     assert.equal(
       await readFile(
         join(configuration.outputDirectory, "frozen/skills/candidate/test-skill/reference.md"),

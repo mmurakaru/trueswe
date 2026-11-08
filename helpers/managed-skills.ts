@@ -1,5 +1,5 @@
 import { readdir, readFile, writeFile, mkdir, stat } from "node:fs/promises";
-import { join, resolve, extname, dirname } from "node:path";
+import { join, resolve, extname, dirname, posix } from "node:path";
 import { createHash } from "node:crypto";
 import { parse as parseYaml } from "yaml";
 import * as validation from "valibot";
@@ -31,6 +31,27 @@ const publishRequestSchema = validation.strictObject({
 });
 type ManagedSkillFiles = validation.InferOutput<typeof textFileSchema>[];
 
+function validateManagedSkillLinks(files: ManagedSkillFiles, paths: Set<string>): void {
+  for (const file of files.filter((item) =>
+    [".md", ".markdown", ".mdx"].includes(extname(item.path)),
+  )) {
+    const links = [
+      ...file.content.matchAll(/\]\((?:<([^>]+)>|([^\s)]+))(?:\s+[^)]*)?\)/g),
+      ...file.content.matchAll(/^\s*\[[^\]]+\]:\s*(?:<([^>]+)>|(\S+))/gm),
+    ];
+    for (const link of links) {
+      const target = link[1] ?? link[2] ?? "";
+      if (/^[a-z][a-z0-9+.-]*:/i.test(target) || target.startsWith("#")) continue;
+      const decoded = decodeURIComponent(target.split(/[?#]/)[0] ?? "");
+      const path = posix.normalize(posix.join(posix.dirname(file.path), decoded));
+      if (decoded.startsWith("/") || !paths.has(path))
+        throw new Error(
+          `Managed skill support file is missing or outside the bundle: ${file.path} -> ${target}`,
+        );
+    }
+  }
+}
+
 function validateManagedSkillFiles(files: ManagedSkillFiles): {
   name: string;
   description: string;
@@ -58,6 +79,7 @@ function validateManagedSkillFiles(files: ManagedSkillFiles): {
     bytes += Buffer.byteLength(file.content);
   }
   if (bytes > 1_000_000) throw new Error("Managed skill bundle exceeds 1000000 UTF-8 bytes");
+  validateManagedSkillLinks(files, paths);
   const entry = files.find((file) => file.path === "SKILL.md");
   const header = entry?.content.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/)?.[1];
   if (!header) throw new Error("Managed skill requires a root SKILL.md with YAML frontmatter");
@@ -85,7 +107,12 @@ async function collectManagedSkillFiles(
           `Managed skill file type is unsupported by Langfuse ${format.version}: ${relativePath}`,
         );
       budget.files += 1;
-      budget.bytes += (await stat(path)).size;
+      const metadata = await stat(path);
+      if ((metadata.mode & 0o111) !== 0)
+        throw new Error(
+          `Langfuse cannot preserve executable permissions: ${relativePath}. Use an explicit interpreter and a non-executable source file.`,
+        );
+      budget.bytes += metadata.size;
       if (budget.files > 200 || budget.bytes > 1_000_000)
         throw new Error("Managed skill bundle exceeds its file or byte limit");
       const bytes = await readFile(path);

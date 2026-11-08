@@ -30,4 +30,7 @@ const trial = join(configuration.jobs_dir, configuration.job_name, "trial");
 await mkdir(join(trial, "agent"), { recursive: true });
 await writeFile(join(trial, "config.json"), "{}");
 await writeFile(join(trial, "result.json"), JSON.stringify(fixture));
-await writeFile(join(trial, "agent", "trajectory.json"), JSON.stringify({ steps: [] }));
+await writeFile(
+  join(trial, "agent", "trajectory.json"),
+  JSON.stringify(fixture.trajectory ?? { steps: [] }),
+);

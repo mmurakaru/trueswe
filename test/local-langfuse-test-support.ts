@@ -1,13 +1,16 @@
 import { createServer } from "node:http";
 import { createHash } from "node:crypto";
+import { gunzipSync } from "node:zlib";
 
 export async function startLocalLangfuseFixture(): Promise<{
   baseUrl: string;
   traceRequests: () => number;
+  tracePayloads: () => string[];
   close: () => Promise<void>;
   skillSelections: () => string[];
 }> {
   let traceRequests = 0;
+  const tracePayloads: string[] = [];
   const versions: Record<string, unknown>[] = [];
   const selections: string[] = [];
   const server = createServer(async (request, response) => {
@@ -56,12 +59,18 @@ export async function startLocalLangfuseFixture(): Promise<{
       }
       return;
     }
-    request.resume();
     if (request.method === "POST") {
+      const chunks: Buffer[] = [];
+      for await (const chunk of request) chunks.push(Buffer.from(chunk));
+      const body = Buffer.concat(chunks);
+      tracePayloads.push(
+        (request.headers["content-encoding"] === "gzip" ? gunzipSync(body) : body).toString(),
+      );
       traceRequests += 1;
       response.writeHead(200);
       response.end();
     } else {
+      request.resume();
       response.writeHead(200, { "content-type": "application/json" });
       response.end(
         JSON.stringify({
@@ -81,6 +90,7 @@ export async function startLocalLangfuseFixture(): Promise<{
   return {
     baseUrl: `http://127.0.0.1:${address.port}`,
     traceRequests: () => traceRequests,
+    tracePayloads: () => tracePayloads,
     skillSelections: () => selections,
     close: () =>
       new Promise<void>((resolve, reject) =>

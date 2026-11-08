@@ -3,7 +3,7 @@ import { LangfuseSpanProcessor } from "@langfuse/otel";
 import {
   setLangfuseTracerProvider,
   startObservation,
-  propagateAttributes,
+  LangfuseOtelSpanAttributes,
 } from "@langfuse/tracing";
 import { TracerProvider } from "@opentelemetry/sdk-trace";
 import type {
@@ -63,48 +63,53 @@ export async function recordLangfuseAttempt(
   const provider = new TracerProvider({ spanProcessors: [processor] });
   setLangfuseTracerProvider(provider);
   try {
-    const observation = propagateAttributes(
-      { skillsAvailable: skills.map(({ name, version }) => ({ name, version })) },
-      () =>
-        startObservation(
-          `trueswe/${attempt.identifier}`,
-          {
-            input: {
-              task: attempt.taskIdentifier,
-              agent: attempt.agentName,
-              variant: attempt.variantName,
-              repetition: attempt.repetition,
-            },
-            output: { outcome: attempt.outcome, state: attempt.state },
-            metadata: {
-              experiment: configuration.name,
-              trajectoryPath: attempt.trajectoryPath,
-              durationSeconds: attempt.durationSeconds,
-              inputTokens: attempt.inputTokens,
-              outputTokens: attempt.outputTokens,
-              costDollars: attempt.costDollars,
-              skillLoadEvidence: attempt.skillLoadEvidence,
-              skillLoads: attempt.skillLoads,
-              skillSupply: skills.map(({ name, version, contentHash }) => ({
-                name,
-                version,
-                contentHash,
-              })),
-              skillCatalogExposure: skills.length > 0 ? "unknown" : "not-supplied",
-            },
-          },
-          { startTime: attempt.startedAt ? new Date(attempt.startedAt) : new Date() },
-        ),
+    const availability = JSON.stringify(skills.map(({ name, version }) => ({ name, version })));
+    const observation = startObservation(
+      `trueswe/${attempt.identifier}`,
+      {
+        input: {
+          task: attempt.taskIdentifier,
+          agent: attempt.agentName,
+          variant: attempt.variantName,
+          repetition: attempt.repetition,
+        },
+        output: { outcome: attempt.outcome, state: attempt.state },
+        metadata: {
+          experiment: configuration.name,
+          trajectoryPath: attempt.trajectoryPath,
+          durationSeconds: attempt.durationSeconds,
+          inputTokens: attempt.inputTokens,
+          outputTokens: attempt.outputTokens,
+          costDollars: attempt.costDollars,
+          skillLoadEvidence: attempt.skillLoadEvidence,
+          skillLoads: attempt.skillLoads,
+          skillSupply: skills.map(({ name, version, contentHash }) => ({
+            name,
+            version,
+            contentHash,
+          })),
+          skillCatalogExposure: skills.length > 0 ? "unknown" : "not-supplied",
+        },
+      },
+      { startTime: attempt.startedAt ? new Date(attempt.startedAt) : new Date() },
+    );
+    observation.otelSpan.setAttribute(
+      LangfuseOtelSpanAttributes.OBSERVATION_SKILLS_AVAILABLE,
+      availability,
     );
     for (const load of attempt.skillLoads) {
       const event = observation.startObservation(
         "skill_read",
         {
-          input: { name: load.name, version: load.version, path: load.path },
+          input: { skillName: load.name, path: load.path.split(`/skills/${load.name}/`)[1] },
           output: { success: true },
           metadata: { eventReference: load.eventReference },
         },
         { asType: "tool" },
+      );
+      event.otelSpan.setAttribute(
+        LangfuseOtelSpanAttributes.OBSERVATION_SKILLS_AVAILABLE,
+        availability,
       );
       event.end();
     }

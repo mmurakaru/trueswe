@@ -13,6 +13,8 @@ import {
 } from "./secret-redaction.ts";
 import type { ExperimentRecord, AttemptRecord } from "./experiment-record.ts";
 import { harborProgramPath } from "./harbor-runtime.ts";
+import { stageAttemptSkills } from "./skill-supply.ts";
+import { frozenSkillDirectory } from "./managed-skills.ts";
 
 const harborResultSchema = validation.object({
   verifier_environment_mode: validation.nullable(validation.picklist(["separate", "shared"])),
@@ -149,6 +151,9 @@ export async function executeHarborAttempt(
       {
         name: profile.name,
         model_name: profile.model,
+        skills: record.frozenInputs.skills
+          .filter((skill) => skill.variantName === attempt.variantName)
+          .map((skill) => frozenSkillDirectory(configuration, attempt.variantName, skill.name)),
         ...(profile.authentication.method === "api-key"
           ? { model_api_key_name: profile.authentication.keyEnvironment }
           : {}),
@@ -209,4 +214,3 @@ export async function executeHarborAttempt(
   await writeExperimentRecord(experimentRecordPath(configuration), record);
   return evidenceCode;
 }
-import { stageAttemptSkills } from "./skill-supply.ts";
