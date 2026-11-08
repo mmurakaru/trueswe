@@ -122,3 +122,28 @@ test("CLI rejects invalid profiles before planning agent attempts", async () => 
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("experiment preflight rejects unavailable local observation storage before starting a task", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "trueswe-preflight-"));
+  const langfuse = await startLocalLangfuseFixture({ observationsUnavailable: true });
+  try {
+    const configuration = JSON.parse(await readFile("examples/codex-smoke.json", "utf8"));
+    configuration.outputDirectory = join(directory, "experiment");
+    configuration.langfuse.baseUrl = langfuse.baseUrl;
+    const path = join(directory, "configuration.json");
+    await writeFile(path, JSON.stringify(configuration));
+    const result = await launchExperimentCommand(["run", path], {
+      ...process.env,
+      LANGFUSE_PUBLIC_KEY: "pk-lf-test",
+      LANGFUSE_SECRET_KEY: "sk-lf-test",
+    });
+    assert.notEqual(result.status, 0);
+    assert.match(result.output, /observation storage unavailable/);
+    await assert.rejects(readFile(join(configuration.outputDirectory, "experiment.json")), {
+      code: "ENOENT",
+    });
+  } finally {
+    await langfuse.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});

@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { mkdir, rm } from "node:fs/promises";
 import { resolve, dirname } from "node:path";
 import {
@@ -6,12 +7,15 @@ import {
   experimentRecordPath,
   writeExperimentRecord,
   readExperimentRecord,
+  readFrozenExperiment,
+  attemptExecutionDirectory,
 } from "./experiment-record.ts";
 import type { ExperimentRecord, AttemptRecord } from "./experiment-record.ts";
 import { checkLocalLangfuse, recordLangfuseAttempt } from "./local-langfuse.ts";
-import { executeHarborAttempt } from "./harbor-attempt.ts";
+import { executeHarborAttempt, recoverHarborAttempt } from "./harbor-attempt.ts";
 import { writeExperimentReport } from "./experiment-report.ts";
 import { freezeExperimentInputs, verifyFrozenExperimentInputs } from "./experiment-freeze.ts";
+import { stopOwnedExecution, cleanupOwnedTaskResources } from "./owned-execution.ts";
 import { observeSkillLoads } from "./skill-load-evidence.ts";
 
 export async function prepareExperiment(configurationPath: string): Promise<number> {
@@ -43,13 +47,17 @@ export async function prepareExperiment(configurationPath: string): Promise<numb
             agentName: profile.name,
             variantName: variant.name,
             repetition,
+            executionNumber: 1,
+            warnings: [],
             state: "pending",
             outcome: null,
             startedAt: null,
             finishedAt: null,
             durationSeconds: null,
             trajectoryPath: null,
-            traceIdentifier: null,
+            traceIdentifier: randomBytes(16).toString("hex"),
+            observationIdentifier: randomBytes(8).toString("hex"),
+            traceExportAttempted: false,
             inputTokens: null,
             outputTokens: null,
             costDollars: null,
@@ -57,6 +65,7 @@ export async function prepareExperiment(configurationPath: string): Promise<numb
             exceptionType: null,
             skillLoads: [],
             skillLoadEvidence: variant.skills.length > 0 ? "unknown" : "not-supplied",
+            executionHistory: [],
           });
         }
   const record: ExperimentRecord = {
@@ -122,6 +131,10 @@ export async function finalizeExperimentOrdinal(
   attempt.skillLoadEvidence =
     skills.length === 0 ? "not-supplied" : attempt.skillLoads.length > 0 ? "observed" : "unknown";
   await writeExperimentRecord(experimentRecordPath(configuration), record);
+  attempt.traceIdentifier ??= randomBytes(16).toString("hex");
+  attempt.observationIdentifier ??= randomBytes(8).toString("hex");
+  attempt.traceExportAttempted = true;
+  await writeExperimentRecord(experimentRecordPath(configuration), record);
   try {
     attempt.traceIdentifier = await recordLangfuseAttempt(configuration, attempt, skills);
   } catch {
@@ -167,4 +180,88 @@ export async function discardPreparedExperiment(configurationPath: string): Prom
   )
     throw new Error("Only the matching unstarted experiment can be discarded");
   await rm(resolve(configuration.outputDirectory), { recursive: true });
+}
+
+export async function prepareResume(
+  configurationPath: string,
+  requireReadiness = true,
+): Promise<number> {
+  const record = await readFrozenExperiment(configurationPath);
+  await verifyFrozenExperimentInputs(record);
+  if (requireReadiness && record.attempts.some((attempt) => attempt.state !== "completed"))
+    await checkLocalLangfuse(record.configuration);
+  return record.attempts.length;
+}
+
+export async function readAttemptState(
+  configurationPath: string,
+  ordinal: number,
+): Promise<string> {
+  const record = await readFrozenExperiment(configurationPath);
+  const attempt = record.attempts[ordinal];
+  if (!attempt) throw new Error("Attempt is absent");
+  return attempt.state;
+}
+
+export async function recoverExperimentOrdinal(
+  configurationPath: string,
+  ordinal: number,
+): Promise<number> {
+  const record = await readFrozenExperiment(configurationPath);
+  await verifyFrozenExperimentInputs(record);
+  const attempt = record.attempts[ordinal];
+  if (!attempt || attempt.state !== "running")
+    throw new Error("Recovery requires a running attempt");
+  return recoverHarborAttempt(record, attempt);
+}
+
+export async function retryExperimentOrdinal(
+  configurationPath: string,
+  ordinal: number,
+): Promise<void> {
+  const record = await readFrozenExperiment(configurationPath);
+  await verifyFrozenExperimentInputs(record);
+  const attempt = record.attempts[ordinal];
+  if (!attempt || !["interrupted", "execution-error"].includes(attempt.state))
+    throw new Error("Only an unfinished attempt can be retried");
+  const directory = attemptExecutionDirectory(record, attempt);
+  await stopOwnedExecution(directory);
+  const warnings = await cleanupOwnedTaskResources(directory);
+  if (warnings.length > 0) {
+    attempt.warnings.push(...warnings);
+    await writeExperimentRecord(experimentRecordPath(record.configuration), record);
+    throw new Error(
+      "Owned task resources could not be cleaned; retry resume after restoring the local Docker service",
+    );
+  }
+  const {
+    identifier: _identifier,
+    ordinal: _ordinal,
+    taskIdentifier: _task,
+    agentName: _agent,
+    variantName: _variant,
+    repetition: _repetition,
+    executionHistory,
+    ...execution
+  } = attempt;
+  executionHistory.push(execution);
+  Object.assign(attempt, {
+    executionNumber: attempt.executionNumber + 1,
+    state: "pending",
+    outcome: null,
+    startedAt: null,
+    finishedAt: null,
+    durationSeconds: null,
+    trajectoryPath: null,
+    inputTokens: null,
+    outputTokens: null,
+    costDollars: null,
+    error: null,
+    exceptionType: null,
+    skillLoads: [],
+    skillLoadEvidence: "unknown",
+    traceExportAttempted: false,
+    warnings: [],
+  });
+  await writeExperimentRecord(experimentRecordPath(record.configuration), record);
 }

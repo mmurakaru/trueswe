@@ -4,7 +4,7 @@ import ./experiment-policy.bend as Experiment
 import ./review-policy.bend as Review
 
 def print_help() -> IO(Unit):
-  IO.print("TrueSWE\n\nUsage: trueswe --help | --version | plan CONFIG | run CONFIG | snapshot REQUEST | verify-snapshot DIRECTORY | publish-skill REQUEST | review REQUEST | reviews CONFIG | label REQUEST\n\nLocal coding-agent experiments with verified task outcomes.")
+  IO.print("TrueSWE\n\nUsage: trueswe --help | --version | plan CONFIG | run CONFIG | resume CONFIG | recover CONFIG | snapshot REQUEST | verify-snapshot DIRECTORY | publish-skill REQUEST | review REQUEST | reviews CONFIG | label REQUEST\n\nLocal coding-agent experiments with verified task outcomes.")
 
 def finish_helper(result: U32 & (String & String)) -> IO(Unit):
   (status, (output, errors)) = result
@@ -93,6 +93,77 @@ def run_experiment(+configuration: String) -> IO(Unit):
     facts : String <- helper_output(facts_result)
     validate_comparison(U32.read(facts), count, configuration)
 
+def run_pending(+configuration: String, +ordinal: U32) -> IO(Unit):
+  do IO<Unit>:
+    result : U32 & (String & String) <- invoke_helper(["attempt", configuration, U32.show(ordinal)])
+    evidence : String <- helper_output(result)
+    finalize_attempt(U32.read(evidence), configuration, ordinal)
+
+def retry_state(state: String, +configuration: String, +ordinal: U32) -> IO(Unit):
+  match state:
+    case "completed":
+      IO.pure(Unit, Unit{})
+    case "pending":
+      run_pending(configuration, ordinal)
+    case _:
+      do IO<Unit>:
+        result : U32 & (String & String) <- invoke_helper(["retry-attempt", configuration, U32.show(ordinal)])
+        output : String <- helper_output(result)
+        run_pending(configuration, ordinal)
+
+def retry_unfinished(state: String, configuration: String, ordinal: U32, execute: Bool) -> IO(Unit):
+  match execute:
+    case True{}:
+      retry_state(state, configuration, ordinal)
+    case False{}:
+      IO.pure(Unit, Unit{})
+
+def resume_one(state: String, +configuration: String, +ordinal: U32, execute: Bool) -> IO(Unit):
+  match state:
+    case "completed":
+      IO.pure(Unit, Unit{})
+    case "running":
+      do IO<Unit>:
+        result : U32 & (String & String) <- invoke_helper(["recover-attempt", configuration, U32.show(ordinal)])
+        evidence : String <- helper_output(result)
+        finalize_attempt(U32.read(evidence), configuration, ordinal)
+        result : U32 & (String & String) <- invoke_helper(["attempt-state", configuration, U32.show(ordinal)])
+        next_state : String <- helper_output(result)
+        retry_unfinished(next_state, configuration, ordinal, execute)
+    case _:
+      retry_unfinished(state, configuration, ordinal, execute)
+
+def resume_attempts(remaining: Nat, +ordinal: U32, +configuration: String, +execute: Bool) -> IO(Unit):
+  match remaining:
+    case 0n:
+      IO.print("Experiment evidence preserved.")
+    case 1n+rest:
+      do IO<Unit>:
+        result : U32 & (String & String) <- invoke_helper(["attempt-state", configuration, U32.show(ordinal)])
+        state : String <- helper_output(result)
+        resume_one(state, configuration, ordinal, execute)
+        resume_attempts(rest, (ordinal + 1 : U32), configuration, execute)
+
+def resume_count(count: Maybe<&2, U32>, configuration: String, execute: Bool) -> IO(Unit):
+  match count:
+    case None{}:
+      IO.die(Unit, 1, "Integration helper returned an invalid attempt count")
+    case Some{number}:
+      resume_attempts(U32.to_nat(number), 0, configuration, execute)
+
+def resume_preparation(execute: Bool) -> String:
+  match execute:
+    case True{}:
+      "prepare-resume"
+    case False{}:
+      "prepare-recovery"
+
+def resume_experiment(+configuration: String, +execute: Bool) -> IO(Unit):
+  do IO<Unit>:
+    result : U32 & (String & String) <- invoke_helper([resume_preparation(execute), configuration])
+    count : String <- helper_output(result)
+    resume_count(U32.read(count), configuration, execute)
+
 def finalize_review(confidence: Maybe<&2, U32>, +request: String, +identifier: String) -> IO(Unit):
   match confidence:
     case None{}:
@@ -119,6 +190,8 @@ def label_attempt(+request: String) -> IO(Unit):
 
 type ConfigurationCommand is Data:
   RunCommand{}
+  ResumeCommand{}
+  RecoverCommand{}
   PlanCommand{}
   SnapshotCommand{}
   VerifySnapshotCommand{}
@@ -131,6 +204,8 @@ type ConfigurationCommand is Data:
 def configuration_command(name: String) -> ConfigurationCommand:
   table = Map.new(&2, ConfigurationCommand)
   table = Map.set(&2, ConfigurationCommand, table, "run", RunCommand{})
+  table = Map.set(&2, ConfigurationCommand, table, "resume", ResumeCommand{})
+  table = Map.set(&2, ConfigurationCommand, table, "recover", RecoverCommand{})
   table = Map.set(&2, ConfigurationCommand, table, "plan", PlanCommand{})
   table = Map.set(&2, ConfigurationCommand, table, "snapshot", SnapshotCommand{})
   table = Map.set(&2, ConfigurationCommand, table, "verify-snapshot", VerifySnapshotCommand{})
@@ -144,6 +219,10 @@ def route_configuration(command: ConfigurationCommand, configuration: String) ->
   match command:
     case RunCommand{}:
       run_experiment(configuration)
+    case ResumeCommand{}:
+      resume_experiment(configuration, True{})
+    case RecoverCommand{}:
+      resume_experiment(configuration, False{})
     case PlanCommand{}:
       run_helper(["plan", configuration])
     case SnapshotCommand{}:
