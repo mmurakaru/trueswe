@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile, cp } from "node:fs/promises";
+import { mkdir, readFile, writeFile, cp, rm } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -10,6 +10,7 @@ const manifest: { version: string } = JSON.parse(
 );
 const artifactName = `trueswe-${manifest.version}-source`;
 const stage = join(projectRoot, "dist", artifactName);
+await rm(stage, { recursive: true, force: true });
 await mkdir(stage, { recursive: true });
 await Promise.all(
   [

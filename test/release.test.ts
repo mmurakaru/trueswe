@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createHash } from "node:crypto";
@@ -9,6 +9,14 @@ import { createHash } from "node:crypto";
 test("GitHub source artifact contains an executable versioned Bend application", async () => {
   const build = spawnSync(process.execPath, ["scripts/build-release.ts"], { encoding: "utf8" });
   assert.equal(build.status, 0, build.stderr);
+  const firstArchiveName = build.stdout.trim();
+  const stageDirectory = join("dist", firstArchiveName.replace(/\.tar\.gz$/, ""));
+  await writeFile(join(stageDirectory, "helpers", "removed-source.ts"), "obsolete source");
+  const rebuild = spawnSync(process.execPath, ["scripts/build-release.ts"], { encoding: "utf8" });
+  assert.equal(rebuild.status, 0, rebuild.stderr);
+  const contents = spawnSync("tar", ["-tzf", join("dist", firstArchiveName)], { encoding: "utf8" });
+  assert.equal(contents.status, 0, contents.stderr);
+  assert.doesNotMatch(contents.stdout, /removed-source/);
   const checksumText = await readFile("dist/checksums.txt", "utf8");
   const [expectedDigest, archiveName] = checksumText.trim().split(/\s+/);
   assert.ok(archiveName);
