@@ -50,6 +50,7 @@ export async function prepareExperiment(configurationPath: string): Promise<numb
             outputTokens: null,
             costDollars: null,
             error: null,
+            exceptionType: null,
           });
         }
   if (attempts.length > 10_000) throw new Error("Experiment exceeds the 10000 attempt limit");

@@ -35,6 +35,8 @@ async function readRuntimeIdentity(): Promise<FrozenExperimentInputs["runtime"]>
   );
   if (harbor.status !== 0 || !harbor.output.trim())
     throw new Error("Harbor runtime version could not be resolved");
+  if (harbor.output.match(/\d+\.\d+\.\d+(?:[-+][a-zA-Z0-9.-]+)?/)?.[0] !== "0.25.0")
+    throw new Error("Harbor 0.25.0 is required for the pinned result and error-policy format");
   const [helperContentHash, bendContentHash, packageLock] = await Promise.all([
     fingerprintDirectory(join(root, "helpers")),
     fingerprintDirectory(join(root, "src")),

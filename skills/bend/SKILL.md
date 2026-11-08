@@ -10,6 +10,7 @@ Run `npm run check:bend` and exercise the changed command through `npm start --`
 
 Bend functions terminate and variables are affine by default.
 Use explicit Data fields when copying state and match helpers when inspecting computed values.
+Destructure parameters, or use `Pair.fst` and `Pair.snd` to select fields from computed pairs.
 Bend owns experiment decisions; helpers return validated external facts.
 `Process.run` has bounded output and timeout but does not terminate descendants.
 Keep child process groups and task resource cleanup in the integration helper.

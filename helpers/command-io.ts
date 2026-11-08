@@ -52,6 +52,14 @@ try {
         2,
       ),
     );
+  } else if (process.argv[2] === "exception" && process.argv[3] && process.argv[4]) {
+    const { readExperimentConfiguration, readExperimentRecord, experimentRecordPath } =
+      await import("./experiment-record.ts");
+    const configuration = await readExperimentConfiguration(process.argv[3]);
+    const record = await readExperimentRecord(experimentRecordPath(configuration));
+    const attempt = record.attempts[Number(process.argv[4])];
+    if (!attempt) throw new Error("Attempt is absent");
+    process.stdout.write(attempt.exceptionType ?? "");
   } else if (process.argv[2] === "snapshot" && process.argv[3]) {
     const { createTaskSnapshot } = await import("./task-snapshot.ts");
     const snapshot = await createTaskSnapshot(process.argv[3]);

@@ -19,6 +19,15 @@ test("CLI preserves independently verified outcomes and distinguishes execution 
           ["failing", 0, null, "completed", "fail"],
           ["broken", 1, { exception_type: "AgentAuthenticationError" }, "execution-error", null],
           ["interrupted", 0, null, "interrupted", null],
+          ["agent-timeout", 1, { exception_type: "AgentTimeoutError" }, "completed", "pass"],
+          ["agent-refused", 0, { exception_type: "AgentSafetyRefusalError" }, "completed", "fail"],
+          [
+            "provider-unavailable",
+            1,
+            { exception_type: "ApiRateLimitError" },
+            "execution-error",
+            null,
+          ],
         ] as const
       ).map(async ([name, reward, exception, expectedState, expectedOutcome]) => {
         const helper = join(temporaryDirectory, `harbor-${name}`);
@@ -29,7 +38,7 @@ test("CLI preserves independently verified outcomes and distinguishes execution 
           JSON.stringify({
             exception_info: exception,
             interruptParent: name === "interrupted",
-            verifier_environment_mode: exception ? null : "separate",
+            verifier_environment_mode: name === "broken" ? null : "separate",
             verifier_result: { rewards: { accuracy: reward } },
             agent_result: { n_input_tokens: null, n_output_tokens: null, cost_usd: null },
           }),
@@ -81,7 +90,7 @@ test("CLI preserves independently verified outcomes and distinguishes execution 
       }),
     );
     for (const outcome of outcomes) if (outcome.status === "rejected") throw outcome.reason;
-    assert.equal(langfuse.traceRequests(), 4);
+    assert.equal(langfuse.traceRequests(), 7);
   } finally {
     await langfuse.close();
     await rm(temporaryDirectory, { recursive: true, force: true });

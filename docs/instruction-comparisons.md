@@ -20,6 +20,8 @@ The local JSON record preserves each attempt and the exact frozen input manifest
 The Markdown report shows per-task, per-agent, and per-variant outcomes with separate development and reserved sections.
 Execution errors and interruptions stay separate from valid task failures.
 Missing metrics remain unknown.
+The Bend policy follows [Harbor 0.25's reward validity rules](https://github.com/harbor-framework/harbor/blob/v0.25.0/src/harbor/models/trial/error_policy.py).
+Agent budget exhaustion or refusal can retain a valid verifier outcome; provider and infrastructure errors cannot.
 
 Review the evidence before adopting a candidate.
 Use only development task outcomes to choose it, then evaluate a fixed candidate on reserved tasks.

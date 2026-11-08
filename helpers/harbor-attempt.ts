@@ -50,11 +50,13 @@ function applyHarborTrial(
   resultDirectory: string,
 ): number {
   const rewards = trial.verifier_result?.rewards;
+  attempt.exceptionType = trial.exception_info?.exception_type ?? null;
+  if (attempt.exceptionType) attempt.error = attempt.exceptionType;
   attempt.trajectoryPath = join(resultDirectory, "agent", "trajectory.json");
   attempt.inputTokens = trial.agent_result?.n_input_tokens ?? null;
   attempt.outputTokens = trial.agent_result?.n_output_tokens ?? null;
   attempt.costDollars = trial.agent_result?.cost_usd ?? null;
-  if (trial.exception_info || !rewards || Object.keys(rewards).length === 0) {
+  if (!rewards || Object.keys(rewards).length === 0) {
     attempt.error = trial.exception_info?.exception_type ?? "Verifier produced no valid reward";
     return 0;
   }

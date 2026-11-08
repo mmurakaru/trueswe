@@ -92,6 +92,7 @@ export interface AttemptRecord {
   outputTokens: number | null;
   costDollars: number | null;
   error: string | null;
+  exceptionType: string | null;
 }
 export interface ExperimentRecord {
   schemaVersion: 2;
@@ -229,6 +230,7 @@ const experimentRecordSchema = validation.object({
       outputTokens: nullableNumber,
       costDollars: nullableNumber,
       error: nullableText,
+      exceptionType: validation.optional(nullableText, null),
     }),
   ),
 });
